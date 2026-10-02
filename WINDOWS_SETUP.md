@@ -42,7 +42,7 @@ From an empty Windows machine to Hyperscale VR running on a Meta Quest.
 ## 3 - Copy the template's files into the repository
 
 3.1 In File Explorer, open the hyperscale_vr_template folder.
-3.2 Select everything except these four folders: Library, Logs, Temp, UserSettings.
+3.2 Turn on View > Show > Hidden items. Select everything except: .git, .gitignore, .gitattributes, README.md, Library, Logs, Temp, UserSettings, .vs, obj (whichever exist). Copying the template's .git would wipe the repository.
 3.3 Copy (Ctrl+C).
 3.4 Open the hyperscale_vr folder and paste (Ctrl+V).
 3.5 If Windows asks to merge a folder, choose Yes. If it asks to replace a file, choose Skip these files, so the repository's own files stay.
@@ -71,28 +71,28 @@ From an empty Windows machine to Hyperscale VR running on a Meta Quest.
   b. In the window that opens, click Import.
 
 6.2 The token
-  a. Atlas VR > Set the Cesium ion token.
+  a. Public Hyperscale > Set the Cesium ion token.
   b. Paste the token from step 0.4 and click Save. It stays on this machine and never goes into git.
 
 6.3 The scene
-  a. Atlas VR > 2. Create the scene.
+  a. Public Hyperscale > 2. Create the scene.
   b. If Unity asks to save the current scene, choose Don't Save.
-  c. The Atlas VR scene opens with the XR rig and the Atlas VR object.
+  c. The Public Hyperscale scene opens with the XR rig and the Public Hyperscale object.
 
 6.4 The Quest settings
-  a. Atlas VR > 3. Configure for Meta Quest.
+  a. Public Hyperscale > 3. Configure for Meta Quest.
   b. Unity switches to Android, which takes a few minutes. A window lists every setting it made; click OK.
   c. Open Edit > Project Settings > XR Plug-in Management. On the Android tab (the robot icon), OpenXR must be ticked. Under it, Meta Quest Support must be ticked. Tick them if not.
 
 6.5 The check
-  a. Atlas VR > 4. Check the setup.
+  a. Public Hyperscale > 4. Check the setup.
   b. "Ready to build" means go on. Anything under "Needs attention": fix it, or send the list to Claude.
 
 ## 7 - Build and run on the headset
 
 7.1 Connect the headset to the PC with a USB-C cable.
 7.2 Put the headset on. When it asks to allow USB debugging, tick Always allow from this computer and choose Allow.
-7.3 In Unity: Atlas VR > 6. Build and run on the headset.
+7.3 In Unity: Public Hyperscale > 6. Build and run on the headset.
 7.4 The first build takes 10 to 20 minutes. Later builds are faster.
 7.5 When it finishes, the app starts in the headset. Afterwards it is in the headset's Library, under Unknown Sources.
 7.6 The APK file is also saved in the project's Builds folder. Any other Quest in developer mode can install it with:
@@ -110,4 +110,4 @@ From an empty Windows machine to Hyperscale VR running on a Meta Quest.
 
 U.1 In GitHub Desktop: Fetch origin, then Pull origin.
 U.2 Switch to Unity and wait for it to finish importing.
-U.3 Atlas VR > 6. Build and run on the headset.
+U.3 Public Hyperscale > 6. Build and run on the headset.

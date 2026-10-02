@@ -609,7 +609,7 @@ namespace AtlasVR
             var t = UI.Label("Text", c.transform, message, 34, UI.Text); UI.Stretch(t.rectTransform, 40, 40, 40, 40);
             c.transform.position = _eye.position + Flat(_eye.forward) * 1.4f;
             c.transform.rotation = Quaternion.LookRotation(c.transform.position - _eye.position, Vector3.up);
-            Debug.LogError("[Atlas VR] " + message);
+            Debug.LogError("[Public Hyperscale] " + message);
         }
 
         static Vector3 Flat(Vector3 v) { v.y = 0; return v.sqrMagnitude < 1e-6f ? Vector3.forward : v.normalized; }

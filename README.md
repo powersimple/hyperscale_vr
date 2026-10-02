@@ -1,4 +1,4 @@
-# Hyperscale VR
+# Public Hyperscale
 
 The headset version of "Hyperscale in the Public Interest," a geospatial talk built on Cesium. A Unity 6 project using Cesium for Unity and OpenXR, built as an APK for Meta Quest 3 (and runnable on PC VR through Quest Link).
 
@@ -6,9 +6,9 @@ The headset version of "Hyperscale in the Public Interest," a geospatial talk bu
 
 1. Clone this repository into a Unity 6 project made from the VR template (see below for the first time).
 2. Open it in Unity. Window > TextMeshPro > Import TMP Essential Resources (once).
-3. Atlas VR > Set the Cesium ion token.
-4. Atlas VR > Create the scene, then Configure for Meta Quest, then Check the setup.
-5. Headset in developer mode on USB: Atlas VR > Build and run on the headset. The APK is written to `Builds/`; sideload it elsewhere with `adb install -r`.
+3. Public Hyperscale > Set the Cesium ion token.
+4. Public Hyperscale > Create the scene, then Configure for Meta Quest, then Check the setup.
+5. Headset in developer mode on USB: Public Hyperscale > Build and run on the headset. The APK is written to `Builds/`; sideload it elsewhere with `adb install -r`.
 
 ## First time on a new machine
 

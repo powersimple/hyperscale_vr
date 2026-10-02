@@ -1,4 +1,4 @@
-// The Atlas VR menu: pull the package from the Mac, build the scene, configure the project
+// The Public Hyperscale menu: pull the package from the Mac, build the scene, configure the project
 // for Meta Quest, check the setup, and build the APK (or build and run on the headset).
 using System;
 using System.Collections.Generic;
@@ -20,10 +20,10 @@ namespace AtlasVR.EditorTools
     {
         const string ServerKey = "AtlasVR.Server";
         const string DefaultServer = "https://obi-wan-v:3002";
-        const string ScenePath = "Assets/AtlasVR/Scenes/AtlasVR.unity";
+        const string ScenePath = "Assets/AtlasVR/Scenes/PublicHyperscale.unity";
         const string PackageDir = "Assets/StreamingAssets/AtlasPackage";
         const string LocalConfigPath = "Assets/AtlasVR/Resources/AtlasVRLocal.json";
-        const string AppId = "org.academyimmersive.atlasvr";
+        const string AppId = "org.academyimmersive.publichyperscale";
 
         public static string Server
         {
@@ -32,12 +32,12 @@ namespace AtlasVR.EditorTools
         }
 
         // ------------------------------------------------------------ package
-        [MenuItem("Atlas VR/1. Pull package from the Mac", priority = 1)]
+        [MenuItem("Public Hyperscale/1. Pull package from the Mac", priority = 1)]
         public static void Pull()
         {
             try
             {
-                EditorUtility.DisplayProgressBar("Atlas VR", "Asking the Mac for the newest package", 0f);
+                EditorUtility.DisplayProgressBar("Public Hyperscale", "Asking the Mac for the newest package", 0f);
                 string latest = GetText(Server + "/vr/packages/latest.json");
                 string name = JsonUtility.FromJson<Latest>(latest).package;
                 if (string.IsNullOrEmpty(name)) throw new Exception("The Mac has no package yet. On the Mac, run the export script.");
@@ -51,7 +51,7 @@ namespace AtlasVR.EditorTools
                 File.WriteAllText(Path.Combine(tmp, "manifest.json"), manifestText);
                 for (int i = 0; i < files.Count; i++)
                 {
-                    EditorUtility.DisplayProgressBar("Atlas VR", "Downloading " + files[i], (i + 1f) / (files.Count + 1f));
+                    EditorUtility.DisplayProgressBar("Public Hyperscale", "Downloading " + files[i], (i + 1f) / (files.Count + 1f));
                     byte[] data = GetBytes(baseUrl + files[i]);
                     string dst = Path.Combine(tmp, files[i]);
                     Directory.CreateDirectory(Path.GetDirectoryName(dst));
@@ -63,34 +63,34 @@ namespace AtlasVR.EditorTools
                 // The Cesium ion token the web atlas uses, for this machine's builds only.
                 string token = "";
                 try { token = JsonUtility.FromJson<Config>(GetText(Server + "/config")).cesiumIonToken ?? ""; }
-                catch (Exception e) { Debug.LogWarning("[Atlas VR] Could not read the ion token from the Mac: " + e.Message); }
+                catch (Exception e) { Debug.LogWarning("[Public Hyperscale] Could not read the ion token from the Mac: " + e.Message); }
                 Directory.CreateDirectory(Path.GetDirectoryName(LocalConfigPath));
                 var cfg = new LocalConfig { ionToken = token, packageName = name, pulledFrom = Server };
                 File.WriteAllText(LocalConfigPath, JsonUtility.ToJson(cfg, true));
                 AssetDatabase.Refresh();
-                Debug.Log("[Atlas VR] Package " + name + " pulled (" + files.Count + " files)" + (token.Length > 0 ? ", ion token set." : ", no ion token."));
-                EditorUtility.DisplayDialog("Atlas VR", "Package " + name + " is in the project." + (token.Length > 0 ? "" : "\n\nThe Mac did not return a Cesium ion token; the globe will be empty until one is set in Assets/AtlasVR/Resources/AtlasVRLocal.json."), "OK");
+                Debug.Log("[Public Hyperscale] Package " + name + " pulled (" + files.Count + " files)" + (token.Length > 0 ? ", ion token set." : ", no ion token."));
+                EditorUtility.DisplayDialog("Public Hyperscale", "Package " + name + " is in the project." + (token.Length > 0 ? "" : "\n\nThe Mac did not return a Cesium ion token; the globe will be empty until one is set in Assets/AtlasVR/Resources/AtlasVRLocal.json."), "OK");
             }
             catch (Exception e)
             {
-                EditorUtility.DisplayDialog("Atlas VR", "Could not pull the package from " + Server + ".\n\n" + e.Message + "\n\nIs the atlas server running on the Mac (npm run dev), and is the address right (Atlas VR > Set the Mac's address)?", "OK");
+                EditorUtility.DisplayDialog("Public Hyperscale", "Could not pull the package from " + Server + ".\n\n" + e.Message + "\n\nIs the atlas server running on the Mac (npm run dev), and is the address right (Public Hyperscale > Set the Mac's address)?", "OK");
             }
             finally { EditorUtility.ClearProgressBar(); }
         }
 
-        [MenuItem("Atlas VR/Import package from a folder…", priority = 2)]
+        [MenuItem("Public Hyperscale/Import package from a folder…", priority = 2)]
         public static void ImportFolder()
         {
             string src = EditorUtility.OpenFolderPanel("Choose a package folder (it holds manifest.json)", "", "");
             if (string.IsNullOrEmpty(src)) return;
-            if (!File.Exists(Path.Combine(src, "manifest.json"))) { EditorUtility.DisplayDialog("Atlas VR", "That folder has no manifest.json.", "OK"); return; }
+            if (!File.Exists(Path.Combine(src, "manifest.json"))) { EditorUtility.DisplayDialog("Public Hyperscale", "That folder has no manifest.json.", "OK"); return; }
             if (Directory.Exists(PackageDir)) Directory.Delete(PackageDir, true);
             CopyDir(src, PackageDir);
             AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Atlas VR", "Package imported.", "OK");
+            EditorUtility.DisplayDialog("Public Hyperscale", "Package imported.", "OK");
         }
 
-        [MenuItem("Atlas VR/Set the Cesium ion token…", priority = 4)]
+        [MenuItem("Public Hyperscale/Set the Cesium ion token…", priority = 4)]
         public static void SetToken() { TokenWindow.Open(); }
 
         public static void SaveToken(string token)
@@ -101,7 +101,7 @@ namespace AtlasVR.EditorTools
             Directory.CreateDirectory(Path.GetDirectoryName(LocalConfigPath));
             File.WriteAllText(LocalConfigPath, JsonUtility.ToJson(cfg, true));
             AssetDatabase.Refresh();
-            Debug.Log("[Atlas VR] Cesium ion token saved on this machine (kept out of git).");
+            Debug.Log("[Public Hyperscale] Cesium ion token saved on this machine (kept out of git).");
         }
 
         public static string CurrentToken()
@@ -111,11 +111,11 @@ namespace AtlasVR.EditorTools
             return cfg != null ? cfg.ionToken ?? "" : "";
         }
 
-        [MenuItem("Atlas VR/Set the Mac's address…", priority = 3)]
+        [MenuItem("Public Hyperscale/Set the Mac's address…", priority = 3)]
         public static void SetServer() { ServerWindow.Open(); }
 
         // ------------------------------------------------------------ scene
-        [MenuItem("Atlas VR/2. Create the scene", priority = 20)]
+        [MenuItem("Public Hyperscale/2. Create the scene", priority = 20)]
         public static void CreateScene()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -127,8 +127,8 @@ namespace AtlasVR.EditorTools
                 var rig = (GameObject)PrefabUtility.InstantiatePrefab(rigPrefab, scene);
                 rig.transform.position = Vector3.zero;
             }
-            else Debug.LogWarning("[Atlas VR] No XR Origin prefab found (the VR template's Starter Assets). The scene will use a desktop camera.");
-            var app = new GameObject("Atlas VR");
+            else Debug.LogWarning("[Public Hyperscale] No XR Origin prefab found (the VR template's Starter Assets). The scene will use a desktop camera.");
+            var app = new GameObject("Public Hyperscale");
             app.AddComponent<AtlasVRApp>();
             foreach (var l in UnityEngine.Object.FindObjectsByType<Light>())
             {
@@ -144,11 +144,11 @@ namespace AtlasVR.EditorTools
             var list = EditorBuildSettings.scenes.Where(s => s.path != ScenePath).ToList();
             list.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
             EditorBuildSettings.scenes = list.ToArray();
-            Debug.Log("[Atlas VR] Scene saved and set first in the build.");
+            Debug.Log("[Public Hyperscale] Scene saved and set first in the build.");
         }
 
         // ------------------------------------------------------------ configure
-        [MenuItem("Atlas VR/3. Configure for Meta Quest", priority = 21)]
+        [MenuItem("Public Hyperscale/3. Configure for Meta Quest", priority = 21)]
         public static void ConfigureQuest()
         {
             var log = new StringBuilder();
@@ -159,7 +159,7 @@ namespace AtlasVR.EditorTools
                 log.AppendLine("Switched the build target to Android.");
             }
             PlayerSettings.companyName = "Academy of Immersive Arts and Sciences";
-            PlayerSettings.productName = "Atlas VR";
+            PlayerSettings.productName = "Public Hyperscale";
             PlayerSettings.SetApplicationIdentifier(android, AppId);
             PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
@@ -211,24 +211,24 @@ namespace AtlasVR.EditorTools
 
             log.Append(XrSetup.Configure());
             AssetDatabase.SaveAssets();
-            Debug.Log("[Atlas VR] Configured for Meta Quest:\n" + log);
-            EditorUtility.DisplayDialog("Atlas VR", log.ToString(), "OK");
+            Debug.Log("[Public Hyperscale] Configured for Meta Quest:\n" + log);
+            EditorUtility.DisplayDialog("Public Hyperscale", log.ToString(), "OK");
         }
 
         // ------------------------------------------------------------ check
-        [MenuItem("Atlas VR/4. Check the setup", priority = 22)]
+        [MenuItem("Public Hyperscale/4. Check the setup", priority = 22)]
         public static void Check()
         {
             var ok = new List<string>(); var bad = new List<string>();
             Action<bool, string, string> chk = (c, good, problem) => (c ? ok : bad).Add(c ? good : problem);
             string manifest = Path.Combine(PackageDir, "manifest.json");
-            chk(File.Exists(manifest), "Package present: " + (File.Exists(manifest) ? JsonUtility.FromJson<Latest>(File.ReadAllText(manifest)).package : ""), "No package. Run Atlas VR > Pull package from the Mac.");
+            chk(File.Exists(manifest), "Package present: " + (File.Exists(manifest) ? JsonUtility.FromJson<Latest>(File.ReadAllText(manifest)).package : ""), "No package. Run Public Hyperscale > Pull package from the Mac.");
             var cfgText = File.Exists(LocalConfigPath) ? File.ReadAllText(LocalConfigPath) : "";
-            chk(cfgText.Contains("\"ionToken\": \"") && !cfgText.Contains("\"ionToken\": \"\""), "Cesium ion token set.", "No Cesium ion token. Atlas VR > Set the Cesium ion token.");
-            chk(EditorBuildSettings.scenes.Length > 0 && EditorBuildSettings.scenes[0].path == ScenePath, "Atlas VR scene is first in the build.", "Run Atlas VR > Create the scene.");
+            chk(cfgText.Contains("\"ionToken\": \"") && !cfgText.Contains("\"ionToken\": \"\""), "Cesium ion token set.", "No Cesium ion token. Public Hyperscale > Set the Cesium ion token.");
+            chk(EditorBuildSettings.scenes.Length > 0 && EditorBuildSettings.scenes[0].path == ScenePath, "The scene is first in the build.", "Run Public Hyperscale > Create the scene.");
             chk(Type.GetType("CesiumForUnity.Cesium3DTileset, CesiumForUnity") != null, "Cesium for Unity installed.", "Cesium for Unity is missing (see the README, step 2).");
             chk(AssetDatabase.FindAssets("t:TMP_Settings").Length > 0, "TextMeshPro essentials imported.", "Import TextMeshPro essentials (Window > TextMeshPro > Import TMP Essential Resources).");
-            chk(EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android, "Build target is Android.", "Build target is not Android. Run Atlas VR > Configure for Meta Quest.");
+            chk(EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android, "Build target is Android.", "Build target is not Android. Run Public Hyperscale > Configure for Meta Quest.");
             chk(PlayerSettings.GetScriptingBackend(NamedBuildTarget.Android) == ScriptingImplementation.IL2CPP, "IL2CPP.", "Scripting backend is not IL2CPP.");
             chk(PlayerSettings.Android.targetArchitectures == AndroidArchitecture.ARM64, "ARM64 only.", "Target architectures should be ARM64 only.");
             var apis = PlayerSettings.GetGraphicsAPIs(BuildTarget.Android);
@@ -239,24 +239,24 @@ namespace AtlasVR.EditorTools
             chk(inst != null && inst.intValue == 2, "Instancing variants kept.", "Instancing variants may be stripped (Project Settings > Graphics > Instancing Variants: Keep All).");
             foreach (var line in XrSetup.Report()) (line.StartsWith("!") ? bad : ok).Add(line.TrimStart('!'));
             string msg = (bad.Count == 0 ? "Ready to build.\n\n" : "Needs attention:\n- " + string.Join("\n- ", bad) + "\n\n") + "Fine:\n- " + string.Join("\n- ", ok);
-            Debug.Log("[Atlas VR] " + msg);
-            EditorUtility.DisplayDialog("Atlas VR", msg, "OK");
+            Debug.Log("[Public Hyperscale] " + msg);
+            EditorUtility.DisplayDialog("Public Hyperscale", msg, "OK");
         }
 
         // ------------------------------------------------------------ build
-        [MenuItem("Atlas VR/5. Build APK", priority = 40)]
+        [MenuItem("Public Hyperscale/5. Build APK", priority = 40)]
         public static void BuildApk() { Build(false); }
 
-        [MenuItem("Atlas VR/6. Build and run on the headset", priority = 41)]
+        [MenuItem("Public Hyperscale/6. Build and run on the headset", priority = 41)]
         public static void BuildAndRun() { Build(true); }
 
         static void Build(bool run)
         {
-            if (!File.Exists(Path.Combine(PackageDir, "manifest.json"))) { EditorUtility.DisplayDialog("Atlas VR", "Pull the package first.", "OK"); return; }
+            if (!File.Exists(Path.Combine(PackageDir, "manifest.json"))) { EditorUtility.DisplayDialog("Public Hyperscale", "Pull the package first.", "OK"); return; }
             if (EditorBuildSettings.scenes.Length == 0) CreateScene();
             Directory.CreateDirectory("Builds");
             string stamp = DateTime.Now.ToString("yyyy-MM-dd_HHmm");
-            string path = "Builds/AtlasVR_" + stamp + ".apk";
+            string path = "Builds/PublicHyperscale_" + stamp + ".apk";
             var opts = new BuildPlayerOptions
             {
                 scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray(),
@@ -270,8 +270,8 @@ namespace AtlasVR.EditorTools
             string msg = sum.result == UnityEditor.Build.Reporting.BuildResult.Succeeded
                 ? "Built " + path + " (" + (sum.totalSize / (1024 * 1024)) + " MB) in " + sum.totalTime.TotalMinutes.ToString("0.0") + " min." + (run ? "\nInstalled and started on the headset." : "\nSideload: adb install -r \"" + Path.GetFullPath(path) + "\"")
                 : "The build did not succeed: " + sum.result + ". The Console has the errors.";
-            Debug.Log("[Atlas VR] " + msg);
-            EditorUtility.DisplayDialog("Atlas VR", msg, "OK");
+            Debug.Log("[Public Hyperscale] " + msg);
+            EditorUtility.DisplayDialog("Public Hyperscale", msg, "OK");
         }
 
         // ------------------------------------------------------------ helpers
@@ -410,7 +410,7 @@ namespace AtlasVR.EditorTools
                 var arr = m != null ? m.Invoke(settings, null) as Array : null;
                 if (arr != null) foreach (var f in arr) list.Add(f);
             }
-            catch (Exception e) { Debug.LogWarning("[Atlas VR] Could not read the OpenXR features: " + e.GetBaseException().Message); }
+            catch (Exception e) { Debug.LogWarning("[Public Hyperscale] Could not read the OpenXR features: " + e.GetBaseException().Message); }
             return list;
         }
 

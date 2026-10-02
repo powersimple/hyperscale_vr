@@ -1,5 +1,5 @@
 // Loads the package from StreamingAssets/AtlasPackage (copied there by the editor's
-// "Atlas VR > Pull package" command). On Android (Quest) StreamingAssets lives inside
+// "Public Hyperscale > Pull package" command). On Android (Quest) StreamingAssets lives inside
 // the APK, so every read goes through UnityWebRequest there.
 using System;
 using System.Collections;
@@ -92,14 +92,14 @@ namespace AtlasVR
             yield return ReadText("slides.json", take); if (txt != null) pkg.slides = JsonUtility.FromJson<PkgSlides>(txt).slides; txt = null;
             yield return ReadText("refs.json", take); if (txt != null) pkg.refs = JsonUtility.FromJson<PkgRefs>(txt).refs; txt = null;
             // Layers are optional: a missing one leaves its overlay out, nothing more.
-            Action<string, string> optional = (t, e) => { txt = t; if (e != null) Debug.LogWarning("[Atlas VR] " + e); };
+            Action<string, string> optional = (t, e) => { txt = t; if (e != null) Debug.LogWarning("[Public Hyperscale] " + e); };
             yield return ReadText("layers/compute.json", optional); if (txt != null) pkg.compute = JsonUtility.FromJson<PkgComputeLayer>(txt); txt = null;
             yield return ReadText("layers/telecables.json", optional); if (txt != null) pkg.tele = JsonUtility.FromJson<PkgTeleLayer>(txt); txt = null;
             yield return ReadText("layers/sites.json", optional); if (txt != null) pkg.sites = JsonUtility.FromJson<PkgSites>(txt); txt = null;
 
             if (pkg.slides != null) foreach (var s in pkg.slides) pkg._slides[s.id] = s;
             if (pkg.refs != null) foreach (var r in pkg.refs) pkg._refs[r.id] = r;
-            if (pkg.deck == null || pkg.slides == null) err = err ?? "The package is missing. In the editor, run Atlas VR > Pull package.";
+            if (pkg.deck == null || pkg.slides == null) err = err ?? "The package is missing. In the editor, run Public Hyperscale > Pull package.";
             pkg.error = err;
             done(pkg);
         }

@@ -9,7 +9,7 @@ if (-not ($m.scopedRegistries | Where-Object { $_.url -eq "https://unity.pkg.ces
   $m.scopedRegistries = @($m.scopedRegistries) + [pscustomobject]@{ name = "Cesium"; url = "https://unity.pkg.cesium.com"; scopes = @("com.cesium.unity") }
 }
 if (-not $m.dependencies.PSObject.Properties["com.cesium.unity"]) {
-  $m.dependencies | Add-Member -NotePropertyName "com.cesium.unity" -NotePropertyValue "1.25.1"
+  $m.dependencies | Add-Member -NotePropertyName "com.cesium.unity" -NotePropertyValue "1.26.0"
 }
 # Written without a byte-order mark, which the Package Manager does not accept.
 [IO.File]::WriteAllText($manifestPath, ($m | ConvertTo-Json -Depth 20))

@@ -123,14 +123,14 @@ namespace AtlasVR.EditorTools
             var rigPrefab = FindPrefab("XR Origin (XR Rig)") ?? FindPrefab("XR Origin");
             if (rigPrefab != null)
             {
-                foreach (var cam in UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None)) UnityEngine.Object.DestroyImmediate(cam.gameObject);
+                foreach (var cam in UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Include)) UnityEngine.Object.DestroyImmediate(cam.gameObject);
                 var rig = (GameObject)PrefabUtility.InstantiatePrefab(rigPrefab, scene);
                 rig.transform.position = Vector3.zero;
             }
             else Debug.LogWarning("[Atlas VR] No XR Origin prefab found (the VR template's Starter Assets). The scene will use a desktop camera.");
             var app = new GameObject("Atlas VR");
             app.AddComponent<AtlasVRApp>();
-            foreach (var l in UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
+            foreach (var l in UnityEngine.Object.FindObjectsByType<Light>())
             {
                 if (l.type != LightType.Directional) continue;
                 l.shadows = LightShadows.None;

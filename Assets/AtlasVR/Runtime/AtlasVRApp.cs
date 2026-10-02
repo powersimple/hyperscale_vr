@@ -157,7 +157,7 @@ namespace AtlasVR
         {
             // The XR template's move, turn, teleport, climb, and gravity providers would fight the drone
             // controls; its rays and pokes stay on for the menus.
-            foreach (var mb in FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var mb in FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include))
             {
                 if (mb == null || mb == this) continue;
                 string ns = mb.GetType().Namespace ?? "";

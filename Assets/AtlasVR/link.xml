@@ -1,0 +1,17 @@
+<!-- Keeps what Atlas VR reaches by reflection when IL2CPP strips managed code:
+     Cesium's credit lists (drawn in the headset), the XR Interaction Toolkit's UI raycaster
+     and input module, XR Origin, and the OpenXR refresh-rate helper. -->
+<linker>
+  <assembly fullname="CesiumForUnity" preserve="all"/>
+  <assembly fullname="Unity.XR.Interaction.Toolkit">
+    <type fullname="UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster" preserve="all"/>
+    <type fullname="UnityEngine.XR.Interaction.Toolkit.UI.XRUIInputModule" preserve="all"/>
+  </assembly>
+  <assembly fullname="Unity.XR.CoreUtils">
+    <type fullname="Unity.XR.CoreUtils.XROrigin" preserve="all"/>
+  </assembly>
+  <assembly fullname="Unity.XR.OpenXR" preserve="all"/>
+  <assembly fullname="Unity.RenderPipelines.Universal.Runtime">
+    <type fullname="UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset" preserve="all"/>
+  </assembly>
+</linker>

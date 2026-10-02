@@ -1,0 +1,132 @@
+{
+ "format": 1,
+ "package": "2026-10-02_v1",
+ "created": "2026-10-02T13:20:06.699Z",
+ "deckVersion": "2026-10-01",
+ "counts": {
+  "tracks": 10,
+  "chapters": 24,
+  "slides": 132,
+  "beats": 132,
+  "claims": 262,
+  "stats": 154,
+  "refs": 226,
+  "dcs": 5274,
+  "dcCountries": 148,
+  "aiSites": 179,
+  "cables": 712,
+  "landings": 1925,
+  "images": 12
+ },
+ "showKeys": {
+  "dc": 50,
+  "compute": 45,
+  "night": 40,
+  "spin": 35,
+  "highlight": 32,
+  "power": 29,
+  "footprints": 25,
+  "flows": 21,
+  "pillars": 16,
+  "telecables": 14,
+  "logos": 11,
+  "labels": 10,
+  "streams": 10,
+  "invest": 8,
+  "netflix": 6,
+  "broadcasters": 6,
+  "zones": 4,
+  "outlets": 4,
+  "capacity": 3,
+  "pbs": 3,
+  "callouts": 2,
+  "photoreal": 2,
+  "workforce": 2,
+  "cern": 1,
+  "byBuilder": 1
+ },
+ "missingRefs": [],
+ "imagesNotConverted": [],
+ "files": {
+  "layers/compute.json": {
+   "bytes": 750188,
+   "sha256": "26cc1d33be350e78c847a9dc52dfae5b26425568d0fb260d20872df2358ea117"
+  },
+  "layers/telecables.json": {
+   "bytes": 528883,
+   "sha256": "3aa7783e9758382f2512cd269004fb55807c622459bc3052c389cfe57ee7b38a"
+  },
+  "layers/sites.json": {
+   "bytes": 14579,
+   "sha256": "ed18cfb3bfe6aa3dd45cdcb1dba739a207cadcf7469c6798b15bb13929da9b20"
+  },
+  "layers/other_modules_raw.json": {
+   "bytes": 427750,
+   "sha256": "735ad51883794701d439beaea489179348c948cedffa1a3521fe25681f7b6cac"
+  },
+  "deck.json": {
+   "bytes": 12051,
+   "sha256": "1da3d00c1a2c363402bf420966ffdeede13e43e66ebba8de904ec4caa60cb979"
+  },
+  "slides.json": {
+   "bytes": 295672,
+   "sha256": "c3e8998afd29e8f4ba9ba707c2347189c1fc6e6e350ea192c7c315d816e33bc3"
+  },
+  "refs.json": {
+   "bytes": 74726,
+   "sha256": "0b6e3f2496dde1949f8a3a8c4c219a8225794c962d1a0ed04130607381fa7019"
+  },
+  "entities.json": {
+   "bytes": 3768,
+   "sha256": "3455fe3c4285438048045aa55fe6729cef229d40847c608759c677fbd076d586"
+  },
+  "images/images_logos_google.png": {
+   "bytes": 70117,
+   "sha256": "4aa8c3fd557b922bf672bb35cac548bc951925fb8ea450785e3981ecdda8fe8a"
+  },
+  "images/images_logos_meta.png": {
+   "bytes": 89269,
+   "sha256": "90694a367457a27020f1e2bc55a49b120144939787469143133be82dc1113e77"
+  },
+  "images/images_logos_microsoft.png": {
+   "bytes": 21190,
+   "sha256": "f7f9197cf928c725ddc63e3b62262e0df4e0262e6ae99a54e7fdbcdfd6179437"
+  },
+  "images/images_logos_openai-wordmark.png": {
+   "bytes": 11287,
+   "sha256": "86701ed1fe6eaf3088fa479ec25b573639f92d4ebc479457ce58b59b5beed63e"
+  },
+  "images/images_logos_oracle.png": {
+   "bytes": 38317,
+   "sha256": "0d6aa2fe0358f9b4869bf9d6124eca38ff1f144adb5d05dd1c5bc21109d33c7b"
+  },
+  "images/images_logos_xai.png": {
+   "bytes": 23920,
+   "sha256": "28bb30be8e0e39eb41b73927193c5d7219ff56bced4a61d32789867518c3190d"
+  },
+  "images/media_broadcast.png": {
+   "bytes": 285598,
+   "sha256": "56ac484baf23a7f1a83ab9a4aa3ba8872936b1389aa30132da34a5222d238b51"
+  },
+  "images/media_fiber.png": {
+   "bytes": 1166030,
+   "sha256": "d77145c612371bd4b666642df7b6b139db5a4a420e9211bdbfc1a7348c04ffa3"
+  },
+  "images/media_money.png": {
+   "bytes": 121225,
+   "sha256": "df5dcc71025ecea34a842a9d8831338fb1c79a3724add1923822fa984b0a95ae"
+  },
+  "images/media_power.png": {
+   "bytes": 142960,
+   "sha256": "f7ed452d070bce1346d498ce7ae0d1b750cb62a5f7f13a50726c3672aee28a09"
+  },
+  "images/media_server_hall.png": {
+   "bytes": 227962,
+   "sha256": "b8f255bfcb2d7c1b2e67fd2a0799582858950c29b51026a8a3540204c0981edf"
+  },
+  "images/media_workforce.png": {
+   "bytes": 435914,
+   "sha256": "abb2ca164e69cd97202090dd137b824ff920e8710185cb98722aa67c2097a77b"
+  }
+ }
+}

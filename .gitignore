@@ -1,0 +1,31 @@
+# Unity generates these on each machine
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+*.csproj
+*.sln
+*.suo
+*.user
+*.pidb
+*.booproj
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build output
+*.apk
+*.aab
+*.unitypackage
+
+# Machine-local settings: the Cesium ion token never goes into the repo
+/Assets/AtlasVR/Resources/AtlasVRLocal.json
+/Assets/AtlasVR/Resources/AtlasVRLocal.json.meta
+/Assets/StreamingAssets/AtlasPackage.incoming/

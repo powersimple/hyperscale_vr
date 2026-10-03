@@ -35,6 +35,8 @@ namespace AtlasVR
         public float snapHeight = 900f;
         [Tooltip("Speed multiplier while the right grip is held.")]
         public float turbo = 4f;
+        [Tooltip("Degrees the laser is tipped up from the controller, so a relaxed hand at your side aims straight ahead.")]
+        public float laserPitchUp = 32f;
         [Tooltip("Speed multiplier while the left grip is held.")]
         public float precision = 0.25f;
         public Comfort.Mode comfortMode = Comfort.Mode.Vignette;
@@ -175,6 +177,8 @@ namespace AtlasVR
             _cam.nearClipPlane = 0.05f;
         }
 
+        readonly HashSet<Transform> _tipped = new HashSet<Transform>();
+
         void DisableTemplateLocomotion()
         {
             // The XR template's move, turn, teleport, climb, and gravity providers would fight the
@@ -188,6 +192,12 @@ namespace AtlasVR
                     || n == "ControllerInputActionManager")   // the Starter Assets' teleport-mode switch on the thumbstick
                     mb.enabled = false;
                 if (mb.gameObject.name.Contains("Teleport Interactor") || mb.gameObject.name.Contains("Teleport Stabilized")) mb.gameObject.SetActive(false);
+                // The template's UI rays get the same upward tip as the laser, so both point the same way.
+                if ((n == "NearFarInteractor" || n == "XRRayInteractor") && !_tipped.Contains(mb.transform))
+                {
+                    mb.transform.localRotation = mb.transform.localRotation * Quaternion.Euler(-laserPitchUp, 0, 0);
+                    _tipped.Add(mb.transform);
+                }
             }
             var cc = _floor != null ? _floor.GetComponent<CharacterController>() : null;
             if (cc != null) cc.enabled = false;
@@ -233,6 +243,7 @@ namespace AtlasVR
             _hud.Show(_slide, line, id => { var x = _pkg.Track(id); return x != null ? x.title : id; });
             _hud.SetPosition(_track == "main" ? (_pkg.deck != null ? _pkg.deck.title : "Main story") : t.title, _index, t.beats.Length);
             _hud.SetTrack(_track);
+            _hud.SetTrackLayout(t);
             _selected = null;
             _hud.ShowInfo(_hover, null);
             _filters.FromSlide(_slide.show, _flows.HasFlows(_slide.id));   // raises Changed, which applies the layers
@@ -544,7 +555,8 @@ namespace AtlasVR
         {
             Vector3 p; Quaternion q;
             fromHand = HandPose(true, out p, out q);
-            if (fromHand) return new Ray(p, q * Vector3.forward);
+            // Tipped up, so the beam points ahead with the arm relaxed rather than at the slider below.
+            if (fromHand) return new Ray(p, q * Quaternion.Euler(-laserPitchUp, 0, 0) * Vector3.forward);
             if (Mouse.current != null && _cam != null && !_xr) return _cam.ScreenPointToRay(Mouse.current.position.ReadValue());
             return new Ray(_eye.position, _eye.forward);
         }
@@ -622,11 +634,13 @@ namespace AtlasVR
             _compass.Update(_rig, _eye, _hud.root, _moving);
             if (Time.unscaledTime >= _placeNext) { _placeNext = Time.unscaledTime + 0.5f; UpdatePlace(); }
             _hud.SetLoading(_rig.Loading ? _rig.LoadPercent : -1f);
+            if (_rig.ImageryProblem != null && _rig.ImageryProblem != _noticeShown) { _noticeShown = _rig.ImageryProblem; _hud.SetNotice(_noticeShown, 20f); }
             _spectator.Tick(_cam);
             if (Time.unscaledTime >= _statusNext) { _statusNext = Time.unscaledTime + 0.25f; _hud.SetStatus(Status()); }
         }
 
         float _statusNext;
+        string _noticeShown;
 
         /// The place under you and your coordinates, upper right, while you are below orbit.
         void UpdatePlace()

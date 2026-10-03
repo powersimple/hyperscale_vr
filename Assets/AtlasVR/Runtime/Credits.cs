@@ -26,13 +26,14 @@ namespace AtlasVR
         public VRCredits(Transform parent, Camera cam, string staticCredits)
         {
             _static = staticCredits;
-            canvas = UI.WorldCanvas("Credits", parent, new Vector2(1000, 64), cam);
-            var bg = UI.Box("Background", canvas.transform, new Color(0.02f, 0.04f, 0.07f, 0.62f)); UI.Stretch(bg.rectTransform); UI.Round(bg, 22f);
-            _logos = UI.Rect("Logos", canvas.transform); UI.Place(_logos, 10, 8, 260, 48);
+            canvas = UI.WorldCanvas("Credits", parent, new Vector2(1060, 96), cam);
+            var bg = UI.Box("Background", canvas.transform, new Color(0.02f, 0.045f, 0.14f, 0.55f)); UI.Stretch(bg.rectTransform); UI.Round(bg, 22f);
+            _logos = UI.Rect("Logos", canvas.transform); UI.Place(_logos, 14, 24, 230, 48);
             var h = _logos.gameObject.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 8; h.childControlWidth = false; h.childControlHeight = false; h.childAlignment = TextAnchor.MiddleLeft;
-            _text = UI.Label("Text", canvas.transform, "", 15, UI.Muted); UI.Place(_text.rectTransform, 280, 6, 712, 54);
-            _text.overflowMode = TextOverflowModes.Ellipsis;
+            // Small type so every credit fits.
+            _text = UI.Label("Text", canvas.transform, "", 10.5f, UI.Muted); UI.Place(_text.rectTransform, 254, 8, 792, 80);
+            _text.overflowMode = TextOverflowModes.Ellipsis; _text.lineSpacing = -6;
         }
 
         public void Tick()

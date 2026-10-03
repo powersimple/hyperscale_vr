@@ -14,14 +14,19 @@ namespace AtlasVR
 {
     public static class UI
     {
-        public static readonly Color Panel = new Color(0.025f, 0.05f, 0.085f, 0.6f);   // glass: the Earth shows through
-        public static readonly Color PanelEdge = new Color(0.2f, 0.32f, 0.45f, 1f);
-        public static readonly Color ButtonBg = new Color(0.14f, 0.24f, 0.36f, 0.72f);
-        public static readonly Color ButtonHover = new Color(0.16f, 0.27f, 0.4f, 1f);
-        public static readonly Color Accent = new Color(0.94f, 0.24f, 0.62f, 1f);
-        public static readonly Color Text = new Color(0.94f, 0.96f, 0.98f, 1f);
-        public static readonly Color Muted = new Color(0.62f, 0.7f, 0.8f, 1f);
-        public static readonly Color Claim = new Color(0.6f, 0.92f, 0.97f, 1f);
+        // Gemstones: translucent sapphire glass, with ruby, emerald, and gold for state and emphasis.
+        public static readonly Color Sapphire = new Color(0.12f, 0.36f, 0.95f, 1f);
+        public static readonly Color Ruby = new Color(0.92f, 0.1f, 0.32f, 1f);
+        public static readonly Color Emerald = new Color(0.06f, 0.78f, 0.48f, 1f);
+        public static readonly Color Gold = new Color(1f, 0.78f, 0.26f, 1f);
+        public static readonly Color Panel = new Color(0.02f, 0.045f, 0.14f, 0.55f);   // deep sapphire glass: the Earth shows through
+        public static readonly Color PanelEdge = new Color(0.3f, 0.5f, 1f, 1f);
+        public static readonly Color ButtonBg = new Color(0.1f, 0.3f, 0.82f, 0.55f);
+        public static readonly Color ButtonHover = new Color(0.2f, 0.45f, 1f, 0.75f);
+        public static readonly Color Accent = Gold;
+        public static readonly Color Text = new Color(0.97f, 0.97f, 1f, 1f);
+        public static readonly Color Muted = new Color(0.74f, 0.8f, 1f, 1f);
+        public static readonly Color Claim = new Color(1f, 0.83f, 0.42f, 1f);
 
         static readonly List<RectTransform> Canvases = new List<RectTransform>();
 
@@ -129,7 +134,7 @@ namespace AtlasVR
             sh.effectColor = new Color(0f, 0.02f, 0.05f, 0.35f);
             sh.effectDistance = new Vector2(0f, -depth);
             var ol = go.AddComponent<Outline>();
-            ol.effectColor = new Color(0.6f, 0.85f, 1f, 0.22f);
+            ol.effectColor = new Color(0.55f, 0.75f, 1f, 0.3f);
             ol.effectDistance = new Vector2(1f, -1f);
         }
 
@@ -190,8 +195,9 @@ namespace AtlasVR
             if (_slabMat == null)
             {
                 _slabMat = new Material(Shader.Find("AtlasVR/Glass"));
-                _slabMat.SetColor("_Color", new Color(0.06f, 0.11f, 0.18f, 0.22f));
-                _slabMat.SetColor("_RimColor", new Color(0.4f, 0.78f, 1f, 0.75f));
+                _slabMat.SetColor("_Color", new Color(0.03f, 0.08f, 0.24f, 0.24f));
+                _slabMat.SetColor("_RimColor", new Color(0.35f, 0.6f, 1f, 0.8f));
+                _slabMat.SetColor("_SheenColor", new Color(1f, 0.85f, 0.45f, 0.7f));
                 _slabMat.SetFloat("_RimPower", 2.2f);
                 _slabMat.renderQueue = 2990;   // before the canvases (3000)
             }
@@ -231,15 +237,15 @@ namespace AtlasVR
         {
             var root = Rect(name, parent);
             var s = root.gameObject.AddComponent<UnityEngine.UI.Slider>();
-            var bg = Box("Track", root, new Color(0.3f, 0.45f, 0.6f, 0.35f)); Stretch(bg.rectTransform, 0, 0, 13, 13); Round(bg, 4f);
+            var bg = Box("Track", root, new Color(0.15f, 0.3f, 0.8f, 0.35f)); Stretch(bg.rectTransform, 0, 0, 13, 13); Round(bg, 4f);
             var fillArea = Rect("Fill Area", root); Stretch(fillArea, 0, 0, 13, 13);
-            var fill = Box("Fill", fillArea, new Color(0.4f, 0.8f, 0.95f, 0.9f)); Stretch(fill.rectTransform); Round(fill, 4f);
+            var fill = Box("Fill", fillArea, new Color(1f, 0.78f, 0.26f, 0.9f)); Stretch(fill.rectTransform); Round(fill, 4f);
             var handleArea = Rect("Handle Area", root); Stretch(handleArea, 13, 13, 0, 0);
             var handle = Box("Handle", handleArea, Color.white);
             handle.sprite = Circle; handle.preserveAspect = true;   // a round knob
             handle.rectTransform.anchorMin = new Vector2(0, 0.5f); handle.rectTransform.anchorMax = new Vector2(0, 0.5f); // the slider drives x only
             handle.rectTransform.sizeDelta = new Vector2(26, 26);
-            var glow = handle.gameObject.AddComponent<Outline>(); glow.effectColor = new Color(0.4f, 0.8f, 1f, 0.5f); glow.effectDistance = new Vector2(2f, -2f);
+            var glow = handle.gameObject.AddComponent<Outline>(); glow.effectColor = new Color(1f, 0.8f, 0.3f, 0.6f); glow.effectDistance = new Vector2(2f, -2f);
             s.fillRect = fill.rectTransform;
             s.handleRect = handle.rectTransform;
             s.targetGraphic = handle;

@@ -138,6 +138,15 @@ namespace AtlasVR
         readonly List<MaterialPropertyBlock> _blocks = new List<MaterialPropertyBlock>();
         readonly List<int> _counts = new List<int>();
 
+        public static Texture2D Atlas { get { if (_atlas == null) _atlas = Resources.Load<Texture2D>("AtlasIcons"); return _atlas; } }
+
+        /// The atlas cell for a kind, as a UV rectangle (for a RawImage).
+        public static UnityEngine.Rect CellRect(string kind)
+        {
+            int cell = Cell(kind);
+            return new UnityEngine.Rect((cell % Cols) / (float)Cols, 1f - (cell / Cols + 1) / (float)Rows, 1f / Cols, 1f / Rows);
+        }
+
         public static int Cell(string kind)
         {
             int i = Array.IndexOf(Kinds, kind);

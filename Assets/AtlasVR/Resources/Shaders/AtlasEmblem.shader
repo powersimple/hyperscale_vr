@@ -6,6 +6,7 @@ Shader "AtlasVR/Emblem"
     {
         _Color ("Color", Color) = (1, 1, 1, 1)
         _Metal ("Metallic", Range(0, 1)) = 0.8
+        _LightDir ("Light direction (world)", Vector) = (0.4, 0.8, -0.45, 0)
     }
     SubShader
     {
@@ -23,6 +24,7 @@ Shader "AtlasVR/Emblem"
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color;
                 float _Metal;
+                float4 _LightDir;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -44,7 +46,7 @@ Shader "AtlasVR/Emblem"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 float3 n = normalize(i.n), v = normalize(i.v);
-                float3 l = normalize(float3(0.4, 0.8, -0.45));
+                float3 l = normalize(_LightDir.xyz);
                 float diff = saturate(dot(n, l)) * 0.75 + 0.25 * (0.5 + 0.5 * n.y);
                 float spec = pow(saturate(dot(n, normalize(l + v))), 48.0);
                 float rim = pow(1.0 - saturate(dot(n, v)), 3.0);

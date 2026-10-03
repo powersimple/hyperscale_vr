@@ -107,6 +107,10 @@ namespace AtlasVR
         Cesium3DTileset ActiveTerrain { get { return _nightShown ? NightTerrain : Terrain; } }
         int ActiveTerrainLayer { get { return _nightShown ? NightLayer : TerrainLayer; } }
         bool _nightShown;
+        /// Set when the night imagery fails to load (for example, Earth at Night is not in the ion
+        /// account): night is then left off, since a terrain without imagery draws white.
+        public bool NightUnavailable { get; private set; }
+        public string ImageryProblem { get; private set; }
         float _nightSince = -100f, _nightSwitched = -100f, _loadDone = -100f, _nightFirstRun = -100f;
 
         CesiumIonRasterOverlay _imagery, _night;
@@ -169,6 +173,7 @@ namespace AtlasVR
             if (!string.IsNullOrEmpty(ionToken)) _night.ionAccessToken = ionToken;
             _night.maximumTextureSize = quest ? 1024 : 2048;
             NightTerrain.suspendUpdate = true;   // warms up after the day Earth has loaded
+            CesiumRasterOverlay.OnCesiumRasterOverlayLoadFailure += OnOverlayFailure;
             if (_cam != null) _cam.cullingMask &= ~(1 << NightLayer);
 
             var p = new GameObject("Google Photorealistic 3D Tiles");
@@ -262,7 +267,7 @@ namespace AtlasVR
 
         public void SetSlideLayers(float night, bool photoreal, bool spin)
         {
-            _nightOn = night >= 0.5f;
+            _nightOn = night >= 0.5f && !NightUnavailable;
             _slidePhotoreal = photoreal;
             _spinDegPerSec = spin ? 2.5f : 0f;
         }
@@ -457,9 +462,23 @@ namespace AtlasVR
         /// Day and night: the wanted Earth loads (hidden) until it is mostly ready, then the two swap,
         /// and the other pauses with its tiles kept. The night Earth also warms up for half a minute
         /// after the first load, so the first night slide does not wait.
+        void OnOverlayFailure(CesiumRasterOverlayLoadFailureDetails d)
+        {
+            if (d.overlay == _night)
+            {
+                NightUnavailable = true;
+                ImageryProblem = "Night imagery unavailable: add Earth at Night (ion asset 3812) to your Cesium ion account";
+            }
+            else if (d.overlay == _imagery) ImageryProblem = "Day imagery failed to load" + (d.httpStatusCode > 0 ? " (HTTP " + d.httpStatusCode + ")" : "");
+            Debug.LogWarning("[Public Hyperscale] Imagery failed (" + d.httpStatusCode + "): " + d.message);
+        }
+
+        void OnDestroy() { CesiumRasterOverlay.OnCesiumRasterOverlayLoadFailure -= OnOverlayFailure; }
+
         void UpdateNight()
         {
             if (Loading) return;
+            if (NightUnavailable && _nightOn) _nightOn = false;   // stay on the day Earth
             float now = Time.time;
             bool warm = now - _loadDone < 30f;
             var want = _nightOn ? NightTerrain : Terrain;
@@ -482,7 +501,7 @@ namespace AtlasVR
                 float since = now - _nightSince;
                 // A tileset that just started reads 100% before it requests anything: give it time.
                 bool fresh = want == NightTerrain && now - _nightFirstRun < 2.5f;
-                if ((since > 0.75f && p >= 90f && !fresh) || since > 6f)
+                if ((since > 0.75f && p >= 90f && !fresh) || since > 20f)   // no early forced swap: an unready night Earth draws white
                 {
                     bool visible = !_photorealOn || _terrainShown;
                     _nightShown = _nightOn;

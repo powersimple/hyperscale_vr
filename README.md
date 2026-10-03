@@ -58,11 +58,12 @@ The MIT license covers the code. The data package keeps its sources' terms (Tele
 - Upper right: filters, a checkbox list with full labels; each slide resets them to what it shows.
 - Lower right: data on the selected marker (hidden when nothing is selected).
 - Bottom of the view: Back, the progress bar and slider, Next.
-- Look down: the sources, then the imagery credits; the Academy wordmark (lower left) and 3D emblem (lower right).
+- Look down: the story slider (notches per slide, chapter names) at 45 degrees, the sources at 60, the imagery credits at 75, and the silver Academy logo flat on the floor; the 3D emblem at the lower right.
 - Upper right, above the filters: the state or province and country under you, with latitude and longitude.
 - Lower right, flying low and moving: a small 3D compass; the needle points the way you face, N stays on north.
-- The HUD turns with you only once your head turns past 60 degrees.
+- Nothing sits in the straight-ahead view. The HUD turns with you only once your head turns past 80 degrees.
+- The laser is tipped up 32 degrees from the controller (`laserPitchUp`), so a relaxed arm aims straight ahead.
 
 On the globe, named data centers and power plants use the story's icons (Tabler glyphs, rendered from the web deck into `Assets/AtlasVR/Resources/AtlasIcons.png`), and the deck's power and data connections draw as glowing arcs with pulses (`layers/flows.json`, written by `_vr/export/flows.mjs`).
 
-Country and state borders come from Natural Earth's 1:50m boundary lines (public domain, no coastlines), written by `_vr/export/borders.mjs` in the atlas app; countries show below about 9,000 km, states below about 2,500 km. Day and night are two terrain tilesets kept loaded side by side, so a night slide never re-images the globe. The emblem mesh is baked from the Academy's glTF model by `_vr/export/bake_emblem.py` into `Assets/AtlasVR/Resources/AcademyEmblem.bytes`, so the project needs no glTF importer. Keyboard in the editor: WASD fly, Q/E zoom, J/L turn, H HUD, N north, arrows next/previous, T fly to.
+Country and state borders come from Natural Earth's 1:50m boundary lines (public domain, no coastlines), written by `_vr/export/borders.mjs` in the atlas app; countries show below about 9,000 km, states below about 2,500 km. Day and night are two terrain tilesets kept loaded side by side, so a night slide never re-images the globe. Night needs Cesium ion's Earth at Night (asset 3812) in your ion account (Asset Depot, Add to my assets); without it the app stays on the day Earth and says so. The emblem mesh is baked from the Academy's glTF model by `_vr/export/bake_emblem.py` into `Assets/AtlasVR/Resources/AcademyEmblem.bytes`, so the project needs no glTF importer. Keyboard in the editor: WASD fly, Q/E zoom, J/L turn, H HUD, N north, arrows next/previous, T fly to.

@@ -119,7 +119,7 @@ namespace AtlasVR
             {
                 bool use = i < _shown.Count;
                 if (_pool[i].gameObject.activeSelf != use) _pool[i].gameObject.SetActive(use);
-                if (use) SetText(_pool[i], "<b>" + Hud.Esc(_shown[i].title) + "</b>\n<size=70%><color=#A6B6C8>" + Hud.Esc(_shown[i].line) + "</color></size>");
+                if (use) SetText(_pool[i], "<b>" + Hud.Esc(_shown[i].title) + "</b>\n<size=70%><color=#BCCBFF>" + Hud.Esc(_shown[i].line) + "</color></size>");
             }
         }
 

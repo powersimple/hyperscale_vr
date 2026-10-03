@@ -127,7 +127,8 @@ namespace AtlasVR
     public class ComputeLayer : IPickable
     {
         readonly PkgComputeLayer _d;
-        readonly MarkerSet _dcRim, _dcCore, _ctyRim, _ctyFill, _aiGlow, _aiRim, _aiCore, _aiBuild;
+        readonly MarkerSet _ctyRim, _ctyFill;
+        readonly IconSet _dcIcons, _aiIcons, _buildIcons;   // the story's icons, facing you
         readonly LabelPool _counts;
         readonly List<int> _aiIndex = new List<int>(), _buildIndex = new List<int>();
         PkgComputeShow _show;
@@ -143,11 +144,12 @@ namespace AtlasVR
             Color edge = new Color(0.04f, 0.11f, 0.2f, 0.9f);
             Mesh disc = Meshes.Disc(16), discFine = Meshes.Disc(32), ring = Meshes.Ring(0.36f, 40);
 
-            _dcRim = new MarkerSet(disc, true, 0) { sizeWS = 0.0034f };
-            _dcCore = new MarkerSet(disc, true, 1) { sizeWS = 0.0026f, minLiftWS = 0.0023f };
-            var cr = new List<MarkerDef>(); var cc = new List<MarkerDef>();
-            foreach (var p in d.dcs) { cr.Add(new MarkerDef(p.lon, p.lat, 1f, edge)); cc.Add(new MarkerDef(p.lon, p.lat, 1f, dc)); }
-            _dcRim.Set(cr); _dcCore.Set(cc);
+            // Data centers: the server icon, small.
+            _dcIcons = new IconSet(-2) { sizeWS = 0.0042f, minLiftWS = 0.002f };
+            var dd = new List<MarkerDef>(); var dcell = new List<int>();
+            int dcCell = IconSet.Cell("dc");
+            foreach (var p in d.dcs) { dd.Add(new MarkerDef(p.lon, p.lat, 1f, Color.white)); dcell.Add(dcCell); }
+            _dcIcons.Set(dd, dcell);
 
             _ctyRim = new MarkerSet(discFine, true, 0) { sizeWS = 0.0062f };
             _ctyFill = new MarkerSet(discFine, true, 1) { sizeWS = 0.0062f, minLiftWS = 0.0024f };
@@ -162,11 +164,13 @@ namespace AtlasVR
             }
             _ctyRim.Set(rr); _ctyFill.Set(ff);
 
-            _aiGlow = new MarkerSet(discFine, false, 0) { sizeWS = 0.004f, Queue = 2445 };
-            _aiRim = new MarkerSet(discFine, true, 2) { sizeWS = 0.004f, minLiftWS = 0.0026f };
-            _aiCore = new MarkerSet(discFine, true, 3) { sizeWS = 0.004f, minLiftWS = 0.0029f };
-            _aiBuild = new MarkerSet(ring, true, 2) { sizeWS = 0.004f, minLiftWS = 0.0026f };
-            var gm = new List<MarkerDef>(); var rm = new List<MarkerDef>(); var km = new List<MarkerDef>(); var bm = new List<MarkerDef>();
+            // AI compute: the campus icon in ruby, sized by compute; under construction, the dashed
+            // planned icon in gold.
+            _aiIcons = new IconSet(0) { sizeWS = 0.0062f, minLiftWS = 0.0024f };
+            _buildIcons = new IconSet(-1) { sizeWS = 0.0062f, minLiftWS = 0.0024f };
+            var km = new List<MarkerDef>(); var kc = new List<int>(); var bm = new List<MarkerDef>(); var bc = new List<int>();
+            Color ruby = new Color(1f, 0.35f, 0.5f, 1f), gold = new Color(1f, 0.85f, 0.45f, 1f);
+            int campus = IconSet.Cell("campus"), planned = IconSet.Cell("planned");
             var order = new List<int>();
             for (int i = 0; i < d.ai.Length; i++) order.Add(i);
             order.Sort((a, b) => d.ai[b].h100e.CompareTo(d.ai[a].h100e));
@@ -175,17 +179,15 @@ namespace AtlasVR
                 var s = d.ai[i];
                 if (s.building)
                 {
-                    bm.Add(new MarkerDef(s.lon, s.lat, 1.3f, ai)); _buildIndex.Add(i);
+                    bm.Add(new MarkerDef(s.lon, s.lat, 0.85f, gold)); bc.Add(planned); _buildIndex.Add(i);
                     continue;
                 }
                 float px = Mathf.Clamp(4f + Mathf.Sqrt((float)(s.h100e > 0 ? s.h100e : 500)) / 22f, 5f, 40f);
                 float k = px / 10f;
-                gm.Add(new MarkerDef(s.lon, s.lat, k * 1.9f, new Color(ai.r, ai.g, ai.b, 0.22f)));
-                rm.Add(new MarkerDef(s.lon, s.lat, k * 1.15f, new Color(1, 1, 1, 0.9f)));
-                km.Add(new MarkerDef(s.lon, s.lat, k, ai));
+                km.Add(new MarkerDef(s.lon, s.lat, Mathf.Clamp(0.55f + k * 0.35f, 0.6f, 1.8f), ruby)); kc.Add(campus);
                 _aiIndex.Add(i);
             }
-            _aiGlow.Set(gm); _aiRim.Set(rm); _aiCore.Set(km); _aiBuild.Set(bm);
+            _aiIcons.Set(km, kc); _buildIcons.Set(bm, bc);
         }
 
         public void SetShow(PkgComputeShow s) { _show = s; }
@@ -202,14 +204,14 @@ namespace AtlasVR
 
             float zoom = Mathf.Clamp((float)(2.0e7 / rig.ViewHeight), 1f, 6f);
             float ptScale = Mathf.Lerp(0.9f, 1.8f, (zoom - 1f) / 5f);
-            _dcRim.sizeWS = 0.0034f * ptScale; _dcCore.sizeWS = 0.0026f * ptScale;
-            _dcRim.visible = _dcCore.visible = pts;
+            _dcIcons.sizeWS = 0.0042f * ptScale;
+            _dcIcons.visible = pts;
             _ctyRim.visible = _ctyFill.visible = cty; _counts.visible = cty;
-            _aiGlow.visible = _aiRim.visible = _aiCore.visible = ai;
-            _aiBuild.visible = build;
+            _aiIcons.visible = ai;
+            _buildIcons.visible = build;
 
-            _dcRim.Draw(rig); _dcCore.Draw(rig); _ctyRim.Draw(rig); _ctyFill.Draw(rig);
-            _aiGlow.Draw(rig); _aiRim.Draw(rig); _aiCore.Draw(rig); _aiBuild.Draw(rig);
+            _dcIcons.Draw(rig); _ctyRim.Draw(rig); _ctyFill.Draw(rig);
+            _buildIcons.Draw(rig); _aiIcons.Draw(rig);
             _counts.Update(rig, eye);
             PointsVisible = pts; AiVisible = ai; BuildingVisible = build;
         }

@@ -26,14 +26,14 @@ namespace AtlasVR
             _root = new GameObject("Compass").transform;
             _root.SetParent(hudRoot, false);
             // Lower right, about 1.1 m out, lying flat and tipped toward you so it reads.
-            Quaternion q = Quaternion.Euler(41f, 40f, 0);   // clear of the bottom bars and the selection panel
+            Quaternion q = Quaternion.Euler(36f, 42f, 0);   // clear of the bottom bars and the selection panel
             _root.localPosition = q * Vector3.forward * 1.1f;
             _root.localRotation = Quaternion.AngleAxis(-38f, Vector3.right);  // face tipped toward the viewer; needle forward
 
             // Body: a dark puck with a light rim.
             // Body: a glass puck with a glowing rim, translucent so the ground shows through.
-            Glass("Rim", _root, cyl, new Color(0.1f, 0.2f, 0.3f, 0.18f), new Color(0.45f, 0.85f, 1f, 1f), 1.6f, new Vector3(0.128f, 0.014f, 0.128f), Vector3.down * 0.013f);
-            Glass("Face", _root, cyl, new Color(0.02f, 0.05f, 0.09f, 0.55f), new Color(0.3f, 0.6f, 0.9f, 0.5f), 3f, new Vector3(0.114f, 0.0125f, 0.114f), Vector3.down * 0.0112f);
+            Glass("Rim", _root, cyl, new Color(0.05f, 0.15f, 0.45f, 0.22f), new Color(0.35f, 0.6f, 1f, 1f), 1.6f, new Vector3(0.128f, 0.014f, 0.128f), Vector3.down * 0.013f);
+            Glass("Face", _root, cyl, new Color(0.02f, 0.05f, 0.16f, 0.55f), new Color(0.3f, 0.5f, 1f, 0.5f), 3f, new Vector3(0.114f, 0.0125f, 0.114f), Vector3.down * 0.0112f);
 
             // Dial: ticks and the cardinal letters, turning together.
             _dial = new GameObject("Dial").transform;
@@ -44,7 +44,7 @@ namespace AtlasVR
             {
                 float a = i * 15f;
                 bool major = i % 6 == 0;
-                var t = Part("Tick " + i, _dial, tick, sh, major ? new Color(0.75f, 0.95f, 1f) : new Color(0.35f, 0.6f, 0.8f), 0.1f,
+                var t = Part("Tick " + i, _dial, tick, sh, major ? new Color(1f, 0.82f, 0.35f) : new Color(0.45f, 0.6f, 1f), 0.3f,
                     new Vector3(0.0018f, 0.0012f, major ? 0.009f : 0.005f), Vector3.zero);
                 t.localRotation = Quaternion.Euler(0, a, 0);
                 t.localPosition = t.localRotation * Vector3.forward * (major ? 0.044f : 0.047f);
@@ -58,7 +58,7 @@ namespace AtlasVR
                 tm.text = card[i];
                 tm.fontSize = 10f; tm.fontStyle = FontStyles.Bold;
                 tm.alignment = TextAlignmentOptions.Center;
-                tm.color = i == 0 ? new Color(1f, 0.32f, 0.36f) : Color.white;
+                tm.color = i == 0 ? new Color(1f, 0.25f, 0.42f) : new Color(1f, 0.9f, 0.7f);
                 Quaternion r = Quaternion.Euler(0, i * 90f, 0);
                 go.transform.localPosition = r * Vector3.forward * 0.031f + Vector3.up * 0.0006f;
                 go.transform.localRotation = r * Quaternion.Euler(90f, 0, 0);    // lying on the dial, tops outward
@@ -70,16 +70,16 @@ namespace AtlasVR
             _needle.SetParent(_root, false);
             _needle.localPosition = Vector3.up * 0.004f;
             var prism = Meshes.Cylinder(4);
-            Part("Tip", _needle, prism, sh, new Color(0.95f, 0.3f, 0.2f), 0.7f, new Vector3(0.008f, 0.003f, 0.05f), Vector3.forward * 0.017f);   // a 4-sided prism stretched along z is a diamond
-            Part("Tail", _needle, prism, sh, new Color(0.85f, 0.88f, 0.92f), 0.7f, new Vector3(0.006f, 0.0028f, 0.03f), Vector3.back * 0.013f);
-            Part("Hub", _needle, cyl, sh, new Color(0.75f, 0.78f, 0.82f), 0.9f, new Vector3(0.008f, 0.004f, 0.008f), Vector3.zero);
+            Part("Tip", _needle, prism, sh, new Color(0.95f, 0.12f, 0.32f), 0.8f, new Vector3(0.008f, 0.003f, 0.05f), Vector3.forward * 0.017f);   // a 4-sided prism stretched along z is a diamond
+            Part("Tail", _needle, prism, sh, new Color(1f, 0.8f, 0.3f), 0.85f, new Vector3(0.006f, 0.0028f, 0.03f), Vector3.back * 0.013f);
+            Part("Hub", _needle, cyl, sh, new Color(1f, 0.82f, 0.4f), 0.9f, new Vector3(0.008f, 0.004f, 0.008f), Vector3.zero);
 
             // Heading, just beyond the dial.
             var hg = new GameObject("Heading");
             hg.transform.SetParent(_root, false);
             _heading = hg.AddComponent<TextMeshPro>();
             _heading.fontSize = 10f; _heading.alignment = TextAlignmentOptions.Center;
-            _heading.color = new Color(0.85f, 0.9f, 0.96f);
+            _heading.color = new Color(1f, 0.85f, 0.5f);
             hg.transform.localPosition = new Vector3(0, 0.002f, 0.08f);
             hg.transform.localRotation = Quaternion.Euler(90f, 0, 0);
             hg.transform.localScale = Vector3.one * 0.0075f;
@@ -113,10 +113,13 @@ namespace AtlasVR
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var m = new Material(sh);
             m.SetColor("_Color", c); m.SetFloat("_Metal", metal);
+            Lit.Add(m);
             go.AddComponent<MeshRenderer>().sharedMaterial = m;
             return go.transform;
         }
 
+        static readonly List<Material> Lit = new List<Material>();
+        static readonly Vector3 LocalLight = new Vector3(0.4f, 0.8f, -0.45f);
         string _lastHeading;
 
         public void Update(GlobeRig rig, Transform eye, Transform hudRoot, bool moving)
@@ -130,6 +133,8 @@ namespace AtlasVR
             if (_root.gameObject.activeSelf != active) _root.gameObject.SetActive(active);
             if (!active) return;
             _root.localScale = Vector3.one * Mathf.SmoothStep(0f, 1f, _shown);
+            Vector3 lw = hudRoot.rotation * LocalLight;   // lit in the display's frame, so the light turns with you
+            foreach (var m in Lit) m.SetVector("_LightDir", lw);
 
             // Angles in the display's frame, clockwise from its forward.
             Vector3 north = hudRoot.InverseTransformDirection(rig.NorthWorld);

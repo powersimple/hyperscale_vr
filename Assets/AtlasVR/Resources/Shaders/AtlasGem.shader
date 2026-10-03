@@ -117,16 +117,23 @@ Shader "AtlasVR/Gem"
                     d -= dot(d, _AtlasLensUp.xyz) * _AtlasLensUp.xyz;
                     clip(_AtlasLens.w - length(d));
                 }
-                // A key light near the eye and a little above: always lit toward you, a highlight up top.
+                // A cut gemstone: a deep body in the marker's own color, a glow through its middle,
+                // a tight sparkle, and denser color at the edges. The color is never washed toward
+                // white, so the sphere reads as the same color as its swatch in the filters.
                 float3 n = normalize(i.normalWS);
                 float3 v = normalize(_WorldSpaceCameraPos.xyz - i.positionWS);
                 float3 up = normalize(mul((float3x3)UNITY_MATRIX_I_V, float3(-0.35, 0.8, 0)));
                 float3 l = normalize(v + up * 0.9);
-                float diff = saturate(dot(n, l)) * 0.75 + 0.25;
-                float spec = pow(saturate(dot(n, normalize(l + v))), 48.0);
-                float rim = pow(1.0 - saturate(dot(n, v)), 2.5);
-                float3 c = i.color.rgb * diff + spec * 0.95 + i.color.rgb * rim * 0.7;
-                return half4(c, i.color.a);
+                float nv = saturate(dot(n, v));
+                float diff = saturate(dot(n, l));
+                float fres = pow(1.0 - nv, 3.0);
+                float3 body = i.color.rgb * (0.5 + 0.38 * diff);
+                float3 glow = i.color.rgb * pow(nv, 3.0) * 0.32;
+                float spec = pow(saturate(dot(n, normalize(l + v))), 96.0);
+                float3 edge = i.color.rgb * fres * 0.45;
+                float3 c = body + glow + edge + spec * 0.85;
+                float a = i.color.a * lerp(0.6, 0.95, fres);
+                return half4(c, saturate(max(a, spec)));
             }
             ENDHLSL
         }

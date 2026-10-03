@@ -31,8 +31,10 @@ namespace AtlasVR
             ai.children.Add(new FilterItem("ai.operating", "Operating"));
             ai.children.Add(new FilterItem("ai.building", "Under construction"));
             var cables = new FilterItem("cables", "Cables");
-            cables.children.Add(new FilterItem("cables.systems", "Cable systems"));
+            cables.children.Add(new FilterItem("cables.systems", "Sea cables"));
+            cables.children.Add(new FilterItem("cables.land", "Land lines"));
             cables.children.Add(new FilterItem("cables.landings", "Landing points"));
+            var clouds = new FilterItem("footprints", "Cloud regions and campuses");
             var power = new FilterItem("power", "Power");
             if (sites != null && sites.plants != null)
                 foreach (var p in sites.plants)
@@ -47,7 +49,7 @@ namespace AtlasVR
             var labels = new FilterItem("labels", "Place labels up close");
             var night = new FilterItem("night", "Night lights");
             var photo = new FilterItem("photoreal", "3D cities up close");
-            categories.AddRange(new[] { dc, ai, cables, power, flows, named, borders, labels, night, photo });
+            categories.AddRange(new[] { dc, ai, clouds, cables, power, flows, named, borders, labels, night, photo });
 
             panels.Add(new FilterItem("panel.story", "Story and title"));
             panels.Add(new FilterItem("panel.stats", "Stats"));
@@ -65,8 +67,21 @@ namespace AtlasVR
         public bool On(string key) { bool v; return _on.TryGetValue(key, out v) && v; }
         public bool Forced(string key) { return _forced.Contains(key); }
 
-        /// Sets a starting value without counting as a viewer change.
-        public void Seed(string key, bool on) { _on[key] = on; }
+        /// Sets a starting value without counting as a viewer change; it is also the value Begin restores.
+        public void Seed(string key, bool on) { _on[key] = on; _seeded[key] = on; }
+        readonly Dictionary<string, bool> _seeded = new Dictionary<string, bool>();
+
+        /// Begin: the settings back to how the app starts (panels, labels, borders, 3D cities).
+        public void Defaults()
+        {
+            foreach (var p in panels) _on[p.key] = true;
+            foreach (var c in categories) foreach (var sub in c.children) _on[sub.key] = true;
+            _on["labels"] = true;
+            _on["borders"] = true;
+            _on["photoreal"] = true;
+            foreach (var kv in _seeded) _on[kv.Key] = kv.Value;
+            _forced.Clear();
+        }
 
         /// A viewer's change.
         public void Toggle(string key)
@@ -76,7 +91,40 @@ namespace AtlasVR
             Raise();
         }
 
-        /// A slide's starting state.
+        /// The categories that put data on the globe (Clear turns these off).
+        public static readonly string[] DataKeys = { "dc", "ai", "footprints", "cables", "power", "flows", "sites", "night" };
+
+        /// Clear: everything off that draws data; the viewer's choice until the next slide.
+        public void ClearAll()
+        {
+            foreach (var k in DataKeys) { _on[k] = false; _forced.Add(k); }
+            Raise();
+        }
+
+        /// A slide's starting state: the layers the export set for it, or else what its show block names.
+        public void FromSlide(PkgSlide slide, bool flows = false)
+        {
+            var f = slide != null ? slide.filters : null;
+            if (f == null || !f.set) { FromSlide(slide != null ? slide.show : null, flows); return; }
+            _forced.Clear();
+            foreach (var c in categories) foreach (var sub in c.children) _on[sub.key] = true;
+            var s = slide.show;
+            _on["dc"] = f.dc;
+            _on["dc.countries"] = s == null || s.compute == null || !s.compute.on || s.compute.countries;
+            _on["ai"] = f.ai;
+            _on["footprints"] = f.footprints;
+            _on["cables"] = f.cables || f.land;
+            _on["cables.systems"] = f.cables || !f.land;
+            _on["cables.land"] = f.land;
+            _on["cables.landings"] = f.landings || !f.cables;
+            _on["power"] = f.power;
+            _on["sites"] = f.sites;
+            _on["night"] = s != null && s.night >= 0.5f;
+            _on["flows"] = flows;
+            Raise();
+        }
+
+        /// The older path: the slide's show block alone.
         public void FromSlide(PkgShow s, bool flows = false)
         {
             _forced.Clear();
@@ -104,6 +152,7 @@ namespace AtlasVR
             LegendFilter.Set("compute:building", !On("ai.building"));
             LegendFilter.Set("tc:cables", !On("cables.systems"));
             LegendFilter.Set("tc:landings", !On("cables.landings"));
+            LegendFilter.Set("tc:land", !On("cables.land"));
             foreach (var f in fuels) LegendFilter.Set("fuel:" + f, !On("power." + f));
             if (Changed != null) Changed();
         }

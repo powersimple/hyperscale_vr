@@ -49,6 +49,14 @@ namespace AtlasVR
         bool _suppress, _hasSelection;
         int _loadingShown = -1;
         PkgSlide _slide;
+        readonly RectTransform _legendRow;
+        readonly TextMeshProUGUI _companyName;
+        readonly List<KeyValuePair<string, Image>> _legendEntries = new List<KeyValuePair<string, Image>>();
+        bool _hasLegend;
+        // The side panels and where they sit normally (yaw, pitch); in orbit they close in beside the Earth.
+        readonly List<Spot> _spots = new List<Spot>();
+        struct Spot { public Transform t; public float yaw, pitch, halfDeg; public int side; }
+        float _orbitBlend;
 
         public event Action Next, Back;
         public event Action<string> Explore, OpenTrack;
@@ -101,13 +109,17 @@ namespace AtlasVR
 
             // Upper right: the filters, a checkbox list.
             _filtersPanel = Panel("Filters", new Vector2(FilterW, 200), 59f, 22f, true);
-            _filterList = UI.Rect("List", _filtersPanel.transform); UI.Stretch(_filterList, 12, 12, 12, 12);
+            _filterList = UI.Rect("List", _filtersPanel.transform); UI.Stretch(_filterList, 22, 22, 18, 18);
             var vl = _filterList.gameObject.AddComponent<VerticalLayoutGroup>();
-            vl.spacing = 2; vl.childControlWidth = true; vl.childControlHeight = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
+            vl.spacing = 4; vl.childControlWidth = true; vl.childControlHeight = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
             var head = UI.Label("Heading", _filterList, "Show on the globe", 15, UI.Muted, FontStyles.UpperCase | FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
             head.gameObject.AddComponent<LayoutElement>().preferredHeight = 28;
             foreach (var c in filters.categories) AddFilter(c);
             AddFilter(new FilterItem("panels", "Panels") { children = filters.panels }, false);
+            // Clear: every layer that draws data off, until the next slide.
+            var clear = UI.Btn("Clear", _filterList, "Clear", 17, () => _filters.ClearAll(), new Color(0.05f, 0.14f, 0.38f, 0.85f));
+            clear.gameObject.AddComponent<LayoutElement>().preferredHeight = 40;
+            var clearText = clear.GetComponentInChildren<TextMeshProUGUI>(); if (clearText != null) clearText.color = UI.Gold;
 
             // Lower right: the selection's data.
             _info = Panel("Selection", new Vector2(390, 330), 64f, -23f);
@@ -122,6 +134,15 @@ namespace AtlasVR
             _filterRow = UI.Rect("Filter state", _bottom.transform); UI.Place(_filterRow, 110, 12, BoxW - 220, 30);
             var fr = _filterRow.gameObject.AddComponent<HorizontalLayoutGroup>();
             fr.spacing = 14; fr.childControlWidth = true; fr.childControlHeight = true; fr.childForceExpandWidth = false; fr.childForceExpandHeight = false; fr.childAlignment = TextAnchor.MiddleLeft;
+            // The players and clouds legend shares the top row: the company a slide is about at the
+            // left, the companies it names at the right, each with its color dot.
+            _companyName = UI.Label("Company", _bottom.transform, "", 20, UI.Gold, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            UI.Place(_companyName.rectTransform, 110, 10, 300, 34);
+            _companyName.textWrappingMode = TextWrappingModes.NoWrap; _companyName.overflowMode = TextOverflowModes.Ellipsis;
+            _legendRow = UI.Rect("Legend", _bottom.transform); UI.Place(_legendRow, 110, 10, BoxW - 220, 34);
+            var lr = _legendRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            lr.spacing = 10; lr.childControlWidth = true; lr.childControlHeight = true; lr.childForceExpandWidth = false; lr.childForceExpandHeight = false; lr.childAlignment = TextAnchor.MiddleRight;
+            CompanyFocus.Changed += MarkLegend;
             _locText = UI.Label("Location", _bottom.transform, "", 13, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             UI.Place(_locText.rectTransform, 110, 46, BoxW - 330, 26);
             _locText.textWrappingMode = TextWrappingModes.NoWrap; _locText.overflowMode = TextOverflowModes.Ellipsis;
@@ -180,6 +201,7 @@ namespace AtlasVR
             UI.Round(edge, 1f);
             UI.Slab(c);
             Place(c.transform, yaw, pitch);
+            if (Mathf.Abs(yaw) > 30f) _spots.Add(new Spot { t = c.transform, yaw = yaw, pitch = pitch, halfDeg = size.x * DegPerUnit * 0.5f, side = yaw < 0 ? -1 : 1 });
             return c;
         }
 
@@ -217,11 +239,18 @@ namespace AtlasVR
             var row = UI.Rect("Row " + key, _filterList);
             row.gameObject.AddComponent<LayoutElement>().preferredHeight = indent > 0 ? RowH - 4 : RowH;
             // The whole row is the hit target: checking a box, or for a heading without one, expanding.
+            // Clear glass behind the label; a soft tint only while the laser is on the row.
             var hit = row.gameObject.AddComponent<Image>();
-            hit.color = indent > 0 ? new Color(0.15f, 0.35f, 1f, 0.08f) : new Color(0.15f, 0.35f, 1f, 0.16f);
+            hit.color = Color.white;
             UI.Round(hit, 8f);
             var b = row.gameObject.AddComponent<Button>();
-            var colors = b.colors; colors.normalColor = Color.white; colors.highlightedColor = new Color(1.6f, 1.6f, 1.6f, 2.5f); colors.colorMultiplier = 2f; b.colors = colors;
+            var colors = b.colors;
+            colors.normalColor = new Color(1f, 1f, 1f, 0f);
+            colors.highlightedColor = new Color(0.35f, 0.55f, 1f, 0.22f);
+            colors.pressedColor = new Color(0.35f, 0.55f, 1f, 0.35f);
+            colors.selectedColor = new Color(1f, 1f, 1f, 0f);
+            colors.colorMultiplier = 1f;
+            b.colors = colors;
             b.targetGraphic = hit;
             float x = 8 + indent;
             if (checkable)
@@ -289,7 +318,7 @@ namespace AtlasVR
             foreach (var c in _filters.categories) rows++;
             rows++; // Panels
             foreach (var kv in _arrows) kv.Value.text = _expanded.Contains(kv.Key) ? "▼" : "◄";
-            float h = 24 + 28 + rows * (RowH + 2) + subs * (RowH - 2);
+            float h = 36 + 28 + rows * (RowH + 4) + subs * RowH + 48;   // padding, heading, rows, Clear
             var rt = (RectTransform)_filtersPanel.transform;
             if (Mathf.Abs(rt.sizeDelta.y - h) > 0.5f)
             {
@@ -323,6 +352,7 @@ namespace AtlasVR
         {
             // The filter state in the bottom box: what is on, with its legend swatch.
             UI.Clear(_filterRow);
+            _filterRow.gameObject.SetActive(!_hasLegend);
             foreach (var c in _filters.categories)
             {
                 if (!_filters.On(c.key) || !Legend.Has(c.key)) continue;
@@ -388,8 +418,9 @@ namespace AtlasVR
                 foreach (var id in s.explore)
                 {
                     string tid = id;
-                    var b = UI.Btn("Explore " + id, _explore, "Explore " + trackTitle(id), 16, () => { if (Explore != null) Explore(tid); }, new Color(0.72f, 0.08f, 0.26f, 0.55f));
+                    var b = UI.Btn("Explore " + id, _explore, "Explore " + trackTitle(id), 16, () => { if (Explore != null) Explore(tid); }, new Color(0.05f, 0.14f, 0.38f, 0.85f));
                     b.gameObject.AddComponent<LayoutElement>().preferredWidth = 160;
+                    var et = b.GetComponentInChildren<TextMeshProUGUI>(); if (et != null) et.color = UI.Gold;
                 }
 
             _image.gameObject.SetActive(false);
@@ -632,6 +663,92 @@ namespace AtlasVR
             }
             sb.Append("\n<size=13><color=#8FA3E0>B flies there. Trigger on empty space clears.</color></size>");
             _infoText.text = sb.ToString();
+        }
+
+        // ------------------------------------------------------------ the companies legend
+        /// The slide's companies on the top row of the bottom box (right-aligned), each a color dot
+        /// and its logo or name. Pointing at one picks out its sites; a click holds it; a second
+        /// click lets go. A slide about one company shows its name at the row's left.
+        public void SetLegend(PkgLegendItem[] items)
+        {
+            UI.Clear(_legendRow);
+            _legendEntries.Clear();
+            _hasLegend = items != null && items.Length > 0;
+            _companyName.text = items != null && items.Length == 1 ? Esc(items[0].name) : "";
+            _legendRow.gameObject.SetActive(_hasLegend);
+            _filterRow.gameObject.SetActive(!_hasLegend);
+            if (!_hasLegend) return;
+            foreach (var it in items)
+            {
+                string company = string.IsNullOrEmpty(it.company) ? it.key : it.company;
+                var bg = UI.Box("Company " + it.name, _legendRow, new Color(0.05f, 0.12f, 0.32f, 0.6f));
+                UI.Round(bg, 10f);
+                var h = bg.gameObject.AddComponent<HorizontalLayoutGroup>();
+                h.padding = new RectOffset(8, 10, 4, 4); h.spacing = 6;
+                h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = false; h.childAlignment = TextAnchor.MiddleLeft;
+                var dot = UI.Box("Dot", bg.transform, Hex.Color(it.color, 1f)); dot.sprite = UI.Circle; dot.raycastTarget = false;
+                var dl = dot.gameObject.AddComponent<LayoutElement>(); dl.preferredWidth = 14; dl.preferredHeight = 14;
+                var name = UI.Label("Name", bg.transform, Esc(it.name), 15, UI.Text, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+                name.textWrappingMode = TextWrappingModes.NoWrap;
+                name.gameObject.AddComponent<LayoutElement>().preferredWidth = name.preferredWidth + 2;
+                if (!string.IsNullOrEmpty(it.image) && _host != null)
+                {
+                    // The mark on a small white plate (most marks are dark); the name gives way to it.
+                    var plate = UI.Box("Plate", bg.transform, new Color(1, 1, 1, 0.95f)); UI.Round(plate, 5f); plate.raycastTarget = false;
+                    var pl = plate.gameObject.AddComponent<LayoutElement>(); pl.preferredWidth = 64; pl.preferredHeight = 24;
+                    var mark = UI.Box("Mark", plate.transform, Color.white); UI.Stretch(mark.rectTransform, 4, 4, 3, 3); mark.preserveAspect = true; mark.raycastTarget = false;
+                    plate.gameObject.SetActive(false);
+                    var nameGo = name.gameObject;
+                    _host.StartCoroutine(_pkg.LoadSprite(it.image, sp => { if (sp != null && mark != null) { mark.sprite = sp; plate.gameObject.SetActive(true); nameGo.SetActive(false); } }));
+                }
+                var b = bg.gameObject.AddComponent<Button>();
+                var colors = b.colors; colors.highlightedColor = new Color(1.5f, 1.5f, 1.5f, 1.4f); colors.colorMultiplier = 1.6f; b.colors = colors;
+                b.targetGraphic = bg;
+                b.onClick.AddListener(() => CompanyFocus.ToggleHeld(company));
+                var relay = bg.gameObject.AddComponent<HoverRelay>();
+                relay.enter = () => CompanyFocus.SetHover(company);
+                relay.exit = () => { if (CompanyFocus.Hover == company) CompanyFocus.SetHover(null); };
+                _legendEntries.Add(new KeyValuePair<string, Image>(company, bg));
+            }
+            MarkLegend();
+        }
+
+        void MarkLegend()
+        {
+            foreach (var kv in _legendEntries)
+            {
+                if (kv.Value == null) continue;
+                bool held = CompanyFocus.Held == kv.Key;
+                var ol = kv.Value.GetComponent<Outline>();
+                if (held && ol == null) { ol = kv.Value.gameObject.AddComponent<Outline>(); ol.effectColor = UI.Gold; ol.effectDistance = new Vector2(2f, -2f); }
+                if (ol != null) ol.enabled = held;
+            }
+        }
+
+        /// From orbit with the display on, the side panels close in beside the Earth so the story
+        /// and its data read next to it; zooming in, they ease back out to their usual places.
+        public void Orbit(GlobeRig rig, Transform eye)
+        {
+            if (rig == null || eye == null || !Visible) return;
+            float target = rig.mode == ViewMode.Flight ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.6f, 1f, rig.OrbitBlend)) : 0f;
+            float before = _orbitBlend;
+            _orbitBlend = Mathf.MoveTowards(_orbitBlend, target, Time.unscaledDeltaTime * 1.6f);
+            if (_orbitBlend < 0.001f && before < 0.001f) return;
+            // The Earth's bearing and angular radius in the display's frame.
+            Vector3 to = rig.BallCenter - eye.position;
+            float dist = to.magnitude;
+            if (dist < 1e-3f) return;
+            Vector3 local = Quaternion.Inverse(root.rotation) * to;
+            float earthYaw = Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg;
+            float half = Mathf.Asin(Mathf.Clamp01(rig.BallRadius / dist)) * Mathf.Rad2Deg;
+            float e = Mathf.SmoothStep(0f, 1f, _orbitBlend);
+            foreach (var sp in _spots)
+            {
+                float beside = earthYaw + sp.side * (half + sp.halfDeg + 3f);
+                // Never closer in than beside the Earth, never farther out than the usual place.
+                float yaw = Mathf.Lerp(sp.yaw, sp.side < 0 ? Mathf.Max(sp.yaw, beside) : Mathf.Min(sp.yaw, beside), e);
+                Place(sp.t, yaw, sp.pitch);
+            }
         }
 
         // ------------------------------------------------------------ placement

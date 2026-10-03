@@ -28,7 +28,8 @@ namespace AtlasVR
             if (key.StartsWith("power.")) return key.Substring(6);
             switch (key)
             {
-                case "cables": case "cables.systems": return "cable";
+                case "cables": case "cables.systems": case "cables.land": return "cable";
+                case "footprints": return "cloud";
                 case "power": return "gas";
                 case "flows": return "stream";
                 case "sites": return "dc";
@@ -46,11 +47,11 @@ namespace AtlasVR
             {
                 var ball = UI.Box("Swatch", parent, c);
                 ball.sprite = UI.Circle; ball.raycastTarget = false;
-                var shine = UI.Box("Shine", ball.transform, new Color(1, 1, 1, 0.65f));
+                var shine = UI.Box("Shine", ball.transform, new Color(1, 1, 1, 0.5f));
                 shine.sprite = UI.Circle; shine.raycastTarget = false;
                 var srt = shine.rectTransform;
                 srt.anchorMin = srt.anchorMax = new Vector2(0.33f, 0.68f);
-                srt.sizeDelta = new Vector2(size * 0.32f, size * 0.32f);
+                srt.sizeDelta = new Vector2(size * 0.24f, size * 0.24f);
                 var edge = ball.gameObject.AddComponent<Outline>(); edge.effectColor = new Color(0, 0, 0, 0.5f); edge.effectDistance = new Vector2(1f, -1f);
                 ball.rectTransform.sizeDelta = new Vector2(size, size);
                 return ball.rectTransform;

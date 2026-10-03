@@ -61,6 +61,8 @@ namespace AtlasVR
         Spectator _spectator;
         ComputeLayer _compute;
         CableLayer _cables;
+        FootprintLayer _footprints;
+        LogoLayer _logos;
         SitesLayer _sites;
         ProximityLabels _proximity;
         BorderLayer _borders;
@@ -72,6 +74,7 @@ namespace AtlasVR
         public double zoomOutHeight = 2.2e7;
         OrbitTitle _orbitTitle;
         ControlsGuide _guide;
+        OrbitMenu _menu;
         FocusLabels _focus;
         PhotoCapture _photo;
         float _placeNext;
@@ -136,7 +139,9 @@ namespace AtlasVR
 
             var layerRoot = new GameObject("Layers").transform;
             if (_pkg.compute != null) { _compute = new ComputeLayer(_pkg.compute, layerRoot); _pickables.Add(_compute); }
-            if (_pkg.tele != null) { _cables = new CableLayer(_pkg.tele); _pickables.Add(_cables); }
+            if (_pkg.footprints != null) { _footprints = new FootprintLayer(_pkg.footprints); _pickables.Add(_footprints); }
+            if (_pkg.tele != null) { _cables = new CableLayer(_pkg.tele, _pkg.land); _pickables.Add(_cables); }
+            _logos = new LogoLayer(_pkg, this);
             if (_pkg.sites != null) { _sites = new SitesLayer(_pkg.sites, layerRoot); _pickables.Add(_sites); }
             _proximity = new ProximityLabels(layerRoot);
             _borders = new BorderLayer(_pkg.borders);
@@ -155,6 +160,9 @@ namespace AtlasVR
             _compass = new Compass(_hud.root, _hud.compassAnchor);
             _orbitTitle = new OrbitTitle(_pkg.deck != null ? _pkg.deck.title : "", subtitleOverGlobe);
             _guide = new ControlsGuide(_hud.root, _cam);
+            _menu = new OrbitMenu(_pkg.deck, _cam);
+            _menu.Begin += Begin;
+            _menu.OpenTrack += id => { _atIntro = false; _hud.Visible = true; _hud.Recenter(); OpenTrack(id); };
             _focus = new FocusLabels(transform);
             _photo = new PhotoCapture(_eye);
             _regions = new Regions(_pkg.regions);
@@ -256,14 +264,19 @@ namespace AtlasVR
             string line = _track == "main" ? (_slide.chapter ?? "") : (ch != null && ch.title != t.title ? t.title + " · " + ch.title : t.title);
             _hud.Show(_slide, line, id => { var x = _pkg.Track(id); return x != null ? x.title : id; });
             _hud.SetPosition(_track == "main" ? (_pkg.deck != null ? _pkg.deck.title : "Main story") : t.title, _index, t.beats.Length);
+            _menu.SetStory(line, _slide.title, _slide.subtitle);
             _hud.SetTrack(_track);
             _hud.SetTrackLayout(t);
             _selected = null;
             _hud.ShowInfo(_hover, null);
-            _filters.FromSlide(_slide.show, _flows.HasFlows(_slide.id));   // raises Changed, which applies the layers
+            CompanyFocus.Clear();
+            if (_compute != null) _compute.SetLegend(_slide.legend);
+            _logos.SetSlide(_slide);
+            _hud.SetLegend(_slide.legend);
+            _filters.FromSlide(_slide, _flows.HasFlows(_slide.id));   // raises Changed, which applies the layers
 
             var c = _slide.camera;
-            if (HasCamera(c)) Fly(c, instant && !introDescent);
+            if (HasCamera(c)) Fly(c, instant && !introDescent, CloseIn(_slide));
             Haptics.Pulse(true, 0.15f, 0.04f);
         }
 
@@ -276,6 +289,12 @@ namespace AtlasVR
             {
                 bool dc = _filters.On("dc"), ai = _filters.On("ai");
                 _compute.SetShow(new PkgComputeShow { on = dc || ai, dcs = dc, ai = ai, countries = true });
+            }
+            if (_footprints != null)
+            {
+                var f = _slide != null ? _slide.filters : null;
+                string[] prov = _filters.Forced("footprints") || f == null || !f.set || f.providers == null || f.providers.Length == 0 ? new[] { "all" } : f.providers;
+                _footprints.SetShow(_filters.On("footprints"), prov);
             }
             if (_cables != null)
             {
@@ -357,10 +376,19 @@ namespace AtlasVR
         }
 
         // ---------------------------------------------------------------- travel
-        /// A slide's view, flown so the place sits ahead and a little below, not under your feet.
-        void Fly(PkgCamera c, bool instant)
+        /// A slide about one or two named sites (xAI's Colossus and its turbines, say) flies in
+        /// closer than the web view: near enough to read the place, not down to the ground.
+        static bool CloseIn(PkgSlide s)
         {
-            double L = c.viewHeight, lon1, lat1, h1, hd1 = c.heading;
+            if (s == null || s.show == null || s.camera == null || s.camera.viewHeight >= 2.5e6) return false;
+            int hl = s.show.highlight != null ? s.show.highlight.Length : 0;
+            return hl >= 1 && hl <= 2;
+        }
+
+        /// A slide's view, flown so the place sits ahead and a little below, not under your feet.
+        void Fly(PkgCamera c, bool instant, bool closer = false)
+        {
+            double L = c.viewHeight * (closer ? 0.5 : 1.0), lon1, lat1, h1, hd1 = c.heading;
             if (L < 2.5e6)
             {
                 const double depress = 20.0 * Math.PI / 180.0;
@@ -451,13 +479,27 @@ namespace AtlasVR
         }
 
         // ---------------------------------------------------------------- frame
-        /// While the Quest system menu is open the app loses focus: everything holds still.
+        /// While the Quest system menu is open the app loses focus: everything holds still, and the
+        /// view goes dark so nothing seems to move with your head (a quick tap of the Meta button
+        /// and the open menu alike).
         public static bool Paused { get; private set; }
+
+        void SetPaused(bool p)
+        {
+            if (p == Paused) return;
+            Paused = p;
+            if (_comfort != null) _comfort.Hold(p);
+            if (p && _travel != null && _travel.fade) _comfort.FadeTo(0f);
+        }
+
+        // Focus changes arrive here before the next Update: darken in the same frame.
+        void OnApplicationFocus(bool focused) { if (_xr && _rig != null) SetPaused(!focused); }
+        void OnApplicationPause(bool paused) { if (_xr && _rig != null && paused) SetPaused(true); }
 
         void Update()
         {
             if (_rig == null || _in == null) return;
-            Paused = _xr && !Application.isFocused;
+            SetPaused(_xr && !Application.isFocused);
             if (Paused) { _laser.Set(false, Vector3.zero, Vector3.zero, false, _eye); return; }
             float dt = Time.deltaTime;
 
@@ -593,6 +635,13 @@ namespace AtlasVR
         {
             bool fromHand;
             Ray ray = PointerRay(out fromHand);
+            // The home screen's buttons answer the laser directly (they sit at the Earth's depth).
+            float menuDist;
+            if (_menu.Point(ray, _in.trigger.WasPressedThisFrame() || _in.select.WasPressedThisFrame(), out menuDist))
+            {
+                _laser.Set(fromHand, ray.origin, ray.GetPoint(menuDist), false, _eye);
+                return;
+            }
             float uiDist = 0;
             bool overUi = _hud.Visible && UI.RayHitsCanvas(ray, out uiDist);
             double lon = 0, lat = 0;
@@ -658,6 +707,8 @@ namespace AtlasVR
             _borders.Draw(_rig);
             _flows.Draw(_rig);
             if (_sites != null) _sites.Draw(_rig, _eye);
+            if (_footprints != null) _footprints.Draw(_rig);
+            _logos.Update(_rig, _eye, _filters.On("ai") || _filters.On("footprints") || _filters.On("dc"));
             if (Paused) return;   // the Quest menu is open: hold everything else still
             _proximity.Update(_rig, _eye, _compute, _cables, _sites);
             _hud.Follow(_eye);
@@ -666,8 +717,11 @@ namespace AtlasVR
             bool below = _rig.mode == ViewMode.Flight && _rig.ViewHeight < GlobeRig.OrbitFrom;
             _compass.Update(_rig, _eye, _hud.root, below && _hud.Visible);
             _orbitTitle.Update(_rig, _eye);
-            _guide.visible = !_hud.Visible && _rig.OrbitBlend > 0.5f;   // from orbit, with the display off
-            _guide.Update();
+            bool home = !_hud.Visible && _rig.OrbitBlend > 0.5f;      // from orbit, with the display off
+            _guide.visible = home;
+            _guide.Update(_rig, _eye);
+            _menu.Update(_rig, _eye, home);
+            _hud.Orbit(_rig, _eye);
             _focus.Update(_rig, _eye, _hover, _selected);
             if (Time.unscaledTime >= _placeNext) { _placeNext = Time.unscaledTime + 0.5f; UpdatePlace(); }
             _hud.SetLoading(_rig.Loading ? _rig.LoadPercent : -1f);
@@ -720,6 +774,24 @@ namespace AtlasVR
             _hud.Visible = false;
             _atIntro = true;
             Haptics.Pulse(false, 0.3f, 0.05f);
+        }
+
+        /// Begin, under the Earth: filters and settings back to the start, the display on, and a
+        /// flight in from orbit to the first slide.
+        void Begin()
+        {
+            _history.Clear();
+            CompanyFocus.Clear();
+            _filters.Defaults();
+            _atIntro = false;
+            _selected = null;
+            _hud.ResetSources();
+            _hud.CloseMenus();
+            _hud.Visible = true;
+            _hud.Recenter();
+            if (_travel != null && _travel.fade) _comfort.FadeTo(0f);
+            GoTo("main", 0);
+            Haptics.Pulse(true, 0.5f, 0.08f);
         }
 
         bool _photoWanted;

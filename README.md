@@ -39,26 +39,28 @@ The MIT license covers the code. The data package keeps its sources' terms (Tele
 
 | Control | Action |
 |---|---|
-| Right stick | Fly forward, back, slide left and right (off in orbit, where the Earth stays north-up) |
-| Left stick | Forward zooms in, back zooms out; left and right turn (turning is off in orbit) |
-| Right trigger | Laser: select a marker (its data and sources show); pull on empty space to clear; press HUD buttons |
-| A | Show or hide the HUD (selection and filters are kept) |
-| B | Fly in to the selected marker, or to wherever the laser points |
-| Y | Turn to face north |
-| X | Previous slide (Next is on the HUD) |
-| Right grip (hold) | Turbo, 4x speed |
-| Left grip (hold) | Precision, 1/4 speed |
-| Left stick click or Menu | Recenter the HUD in front of you |
+| Right stick | Fly forward, back, slide left and right (off in orbit) |
+| Right stick click | Take a photo (saved to the app's Photos folder: Android/data/<app id>/files/Photos) |
+| Left stick | Forward zooms in, back zooms out; left and right turn, or spin the globe from orbit (about 15 s a turn) |
+| Right trigger | Laser (tipped up so a relaxed arm aims ahead): point to label, pull to select; pull on empty space to clear |
+| A | Display on or off; from orbit, with the display off, the controls guide shows |
+| B | Fly to the selection, or to wherever the laser points |
+| Y / X | Next / previous slide |
+| Menu (flat button, left) | The intro: the whole Earth, centered, the equator level with your eyes, display off; title over the pole and the controls guide beside the Earth. The app starts here; Y plays the current slide |
+| Right grip / left grip (hold) | Turbo 4x / precision 1/4 |
+| Left stick click | Recenter the display (and turn it on) |
+| Meta button | The app holds still while the Quest menu is open |
 
 ## Heads-up display
 
 - Look up: the deck title and byline, the slide's title and subtitle.
-- Top of the view: story navigation (a small button for each story, where you are, altitude).
 - Left: the story text and its Explore links, with the stat boxes beneath.
 - Upper right: filters, a checkbox list with full labels; each slide resets them to what it shows.
 - Lower right: data on the selected marker (hidden when nothing is selected).
 - Bottom of the view: Back, the progress bar and slider, Next.
-- Look down: the story slider (notches per slide, chapter names) at 45 degrees, the sources at 60, the imagery credits at 75, and the silver Academy logo flat on the floor; the 3D emblem at the lower right.
+- Look down: what the laser points at; then one box with the filter state, the location line (region, country, coordinates, heading, altitude) with the compass, the stories slider and the slides slider, previous and next arrows at its sides; then the sources, the credits, and the silver Academy logo flat on the floor. The 3D emblem sits at the lower right.
+- From orbit, the deck title and subtitle (Raleway, in Assets/AtlasVR/Resources/Fonts) float above the North Pole.
+- Data points are small gem spheres (sapphire data centers, ruby AI compute, topaz under construction, aquamarine cable landings); named sites keep the story icons. The filter list is the legend.
 - Upper right, above the filters: the state or province and country under you, with latitude and longitude.
 - Lower right, flying low and moving: a small 3D compass; the needle points the way you face, N stays on north.
 - Nothing sits in the straight-ahead view. The HUD turns with you only once your head turns past 80 degrees.

@@ -54,11 +54,8 @@ Shader "AtlasVR/Glass"
                 float3 n = normalize(i.n), v = normalize(i.v);
                 float rim = pow(1.0 - saturate(abs(dot(n, v))), _RimPower);
                 float top = saturate(n.y) * 0.35;
-                // A thin band of light sweeps slowly across the glass: the laser-cut metallic finish.
-                float band = frac(dot(i.ws, float3(0.55, 0.3, 0.78)) * 0.9 - _Time.y * 0.07);
-                float sheen = pow(saturate(1.0 - abs(band - 0.5) * 2.0), 36.0) * (0.35 + 0.65 * rim);
-                float3 rgb = _Color.rgb + _RimColor.rgb * rim + top * 0.25 + _SheenColor.rgb * sheen;
-                float a = saturate(_Color.a + _RimColor.a * rim * 0.85 + top * 0.12 + _SheenColor.a * sheen);
+                float3 rgb = _Color.rgb + _RimColor.rgb * rim + top * 0.25;
+                float a = saturate(_Color.a + _RimColor.a * rim * 0.85 + top * 0.12);
                 return half4(rgb, a);
             }
             ENDHLSL

@@ -26,13 +26,13 @@ namespace AtlasVR
         public VRCredits(Transform parent, Camera cam, string staticCredits)
         {
             _static = staticCredits;
-            canvas = UI.WorldCanvas("Credits", parent, new Vector2(1060, 96), cam);
+            canvas = UI.WorldCanvas("Credits", parent, new Vector2(1220, 96), cam);
             var bg = UI.Box("Background", canvas.transform, new Color(0.02f, 0.045f, 0.14f, 0.55f)); UI.Stretch(bg.rectTransform); UI.Round(bg, 22f);
-            _logos = UI.Rect("Logos", canvas.transform); UI.Place(_logos, 14, 24, 230, 48);
+            _logos = UI.Rect("Logos", canvas.transform); UI.Place(_logos, 14, 34, 186, 28);   // small logos, then the text
             var h = _logos.gameObject.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 8; h.childControlWidth = false; h.childControlHeight = false; h.childAlignment = TextAnchor.MiddleLeft;
             // Small type so every credit fits.
-            _text = UI.Label("Text", canvas.transform, "", 10.5f, UI.Muted); UI.Place(_text.rectTransform, 254, 8, 792, 80);
+            _text = UI.Label("Text", canvas.transform, "", 10.5f, UI.Muted); UI.Place(_text.rectTransform, 210, 8, 996, 80);
             _text.overflowMode = TextOverflowModes.Ellipsis; _text.lineSpacing = -6;
         }
 
@@ -83,8 +83,8 @@ namespace AtlasVR
                 ri.gameObject.SetActive(on);
                 if (!on) continue;
                 ri.texture = imgs[i];
-                float hgt = 34f, w = imgs[i].height > 0 ? hgt * imgs[i].width / imgs[i].height : hgt;
-                ri.rectTransform.sizeDelta = new Vector2(Mathf.Min(w, 200f), hgt);
+                float hgt = 16f, w = imgs[i].height > 0 ? hgt * imgs[i].width / imgs[i].height : hgt;
+                ri.rectTransform.sizeDelta = new Vector2(Mathf.Min(w, 64f), hgt);
             }
         }
 

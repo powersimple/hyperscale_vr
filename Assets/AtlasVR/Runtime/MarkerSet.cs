@@ -36,10 +36,10 @@ namespace AtlasVR
         public int Count { get { return _all.Length; } }
         public int Queue { set { _mat.renderQueue = value; } }
 
-        public MarkerSet(Mesh mesh, bool opaque, int sortingOffset = 0)
+        public MarkerSet(Mesh mesh, bool opaque, int sortingOffset = 0, string shader = "AtlasVR/Marker")
         {
             _mesh = mesh;
-            _mat = new Material(Shader.Find("AtlasVR/Marker"));
+            _mat = new Material(Shader.Find(shader));
             _mat.enableInstancing = true;
             if (opaque)
             {
@@ -128,6 +128,18 @@ namespace AtlasVR
         public static readonly string[] Kinds = { "dc", "planned", "nuclear", "coal", "gas", "hydro", "solar", "wind", "geothermal", "media", "money", "jobs", "anchor", "cable", "cern", "landing", "cloud", "colo", "stream", "tv", "campus" };
         const int Cols = 8, Rows = 3, Batch = 1000;
         static Texture2D _atlas;
+
+        // The atlas is shipped as PNG bytes and decoded here, so no texture import settings are involved.
+        static Texture2D LoadAtlas()
+        {
+            var ta = Resources.Load<TextAsset>("AtlasIconsPng");
+            if (ta != null && ta.bytes != null)
+            {
+                var t = new Texture2D(2, 2, TextureFormat.RGBA32, true) { name = "AtlasIcons", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+                if (t.LoadImage(ta.bytes)) return t;
+            }
+            return Resources.Load<Texture2D>("AtlasIcons");
+        }
         static Mesh _quad;
 
         public bool visible;
@@ -138,7 +150,7 @@ namespace AtlasVR
         readonly List<MaterialPropertyBlock> _blocks = new List<MaterialPropertyBlock>();
         readonly List<int> _counts = new List<int>();
 
-        public static Texture2D Atlas { get { if (_atlas == null) _atlas = Resources.Load<Texture2D>("AtlasIcons"); return _atlas; } }
+        public static Texture2D Atlas { get { if (_atlas == null) _atlas = LoadAtlas(); return _atlas; } }
 
         /// The atlas cell for a kind, as a UV rectangle (for a RawImage).
         public static UnityEngine.Rect CellRect(string kind)
@@ -155,7 +167,7 @@ namespace AtlasVR
 
         public IconSet(int queueOffset = 0)
         {
-            if (_atlas == null) _atlas = Resources.Load<Texture2D>("AtlasIcons");
+            if (_atlas == null) _atlas = LoadAtlas();
             if (_quad == null)
             {
                 _quad = new Mesh { name = "AtlasIconQuad" };

@@ -128,7 +128,7 @@ namespace AtlasVR
     {
         readonly PkgComputeLayer _d;
         readonly MarkerSet _ctyRim, _ctyFill;
-        readonly IconSet _dcIcons, _aiIcons, _buildIcons;   // the story's icons, facing you
+        readonly MarkerSet _dcGems, _aiGems, _buildGems;   // small shiny spheres in gem colors
         readonly LabelPool _counts;
         readonly List<int> _aiIndex = new List<int>(), _buildIndex = new List<int>();
         PkgComputeShow _show;
@@ -144,13 +144,14 @@ namespace AtlasVR
             Color edge = new Color(0.04f, 0.11f, 0.2f, 0.9f);
             Mesh disc = Meshes.Disc(16), discFine = Meshes.Disc(32), ring = Meshes.Ring(0.36f, 40);
 
-            // Data centers: the server icon, small.
-            _dcIcons = new IconSet(-2) { sizeWS = 0.0042f, minLiftWS = 0.002f };
-            var dd = new List<MarkerDef>(); var dcell = new List<int>();
-            int dcCell = IconSet.Cell("dc");
-            foreach (var p in d.dcs) { dd.Add(new MarkerDef(p.lon, p.lat, 1f, Color.white)); dcell.Add(dcCell); }
-            _dcIcons.Set(dd, dcell);
+            // Data centers: small sapphire spheres.
+            var ball = Meshes.Ball();
+            _dcGems = new MarkerSet(ball, true, 0, "AtlasVR/Gem") { sizeWS = 0.0026f, minLiftWS = 0.0015f };
+            var dd = new List<MarkerDef>();
+            foreach (var p in d.dcs) dd.Add(new MarkerDef(p.lon, p.lat, 1f, Legend.Sapphire));
+            _dcGems.Set(dd);
 
+            dc = Legend.Emerald;   // the per-country count discs: an emerald rim
             _ctyRim = new MarkerSet(discFine, true, 0) { sizeWS = 0.0062f };
             _ctyFill = new MarkerSet(discFine, true, 1) { sizeWS = 0.0062f, minLiftWS = 0.0024f };
             _counts = new LabelPool(parent, "Data center counts") { heightWS = 0.006f, liftWS = 0.004f };
@@ -164,13 +165,10 @@ namespace AtlasVR
             }
             _ctyRim.Set(rr); _ctyFill.Set(ff);
 
-            // AI compute: the campus icon in ruby, sized by compute; under construction, the dashed
-            // planned icon in gold.
-            _aiIcons = new IconSet(0) { sizeWS = 0.0062f, minLiftWS = 0.0024f };
-            _buildIcons = new IconSet(-1) { sizeWS = 0.0062f, minLiftWS = 0.0024f };
-            var km = new List<MarkerDef>(); var kc = new List<int>(); var bm = new List<MarkerDef>(); var bc = new List<int>();
-            Color ruby = new Color(1f, 0.35f, 0.5f, 1f), gold = new Color(1f, 0.85f, 0.45f, 1f);
-            int campus = IconSet.Cell("campus"), planned = IconSet.Cell("planned");
+            // AI compute: ruby spheres sized by compute; under construction, topaz.
+            _aiGems = new MarkerSet(ball, true, 2, "AtlasVR/Gem") { sizeWS = 0.0034f, minLiftWS = 0.0019f };
+            _buildGems = new MarkerSet(ball, true, 1, "AtlasVR/Gem") { sizeWS = 0.0034f, minLiftWS = 0.0019f };
+            var km = new List<MarkerDef>(); var bm = new List<MarkerDef>();
             var order = new List<int>();
             for (int i = 0; i < d.ai.Length; i++) order.Add(i);
             order.Sort((a, b) => d.ai[b].h100e.CompareTo(d.ai[a].h100e));
@@ -179,15 +177,15 @@ namespace AtlasVR
                 var s = d.ai[i];
                 if (s.building)
                 {
-                    bm.Add(new MarkerDef(s.lon, s.lat, 0.85f, gold)); bc.Add(planned); _buildIndex.Add(i);
+                    bm.Add(new MarkerDef(s.lon, s.lat, 0.9f, Legend.Topaz)); _buildIndex.Add(i);
                     continue;
                 }
                 float px = Mathf.Clamp(4f + Mathf.Sqrt((float)(s.h100e > 0 ? s.h100e : 500)) / 22f, 5f, 40f);
                 float k = px / 10f;
-                km.Add(new MarkerDef(s.lon, s.lat, Mathf.Clamp(0.55f + k * 0.35f, 0.6f, 1.8f), ruby)); kc.Add(campus);
+                km.Add(new MarkerDef(s.lon, s.lat, Mathf.Clamp(0.6f + k * 0.35f, 0.7f, 2.0f), Legend.Ruby));
                 _aiIndex.Add(i);
             }
-            _aiIcons.Set(km, kc); _buildIcons.Set(bm, bc);
+            _aiGems.Set(km); _buildGems.Set(bm);
         }
 
         public void SetShow(PkgComputeShow s) { _show = s; }
@@ -204,14 +202,14 @@ namespace AtlasVR
 
             float zoom = Mathf.Clamp((float)(2.0e7 / rig.ViewHeight), 1f, 6f);
             float ptScale = Mathf.Lerp(0.9f, 1.8f, (zoom - 1f) / 5f);
-            _dcIcons.sizeWS = 0.0042f * ptScale;
-            _dcIcons.visible = pts;
+            _dcGems.sizeWS = 0.0026f * ptScale; _dcGems.minLiftWS = 0.0015f * ptScale;
+            _dcGems.visible = pts;
             _ctyRim.visible = _ctyFill.visible = cty; _counts.visible = cty;
-            _aiIcons.visible = ai;
-            _buildIcons.visible = build;
+            _aiGems.visible = ai;
+            _buildGems.visible = build;
 
-            _dcIcons.Draw(rig); _ctyRim.Draw(rig); _ctyFill.Draw(rig);
-            _buildIcons.Draw(rig); _aiIcons.Draw(rig);
+            _dcGems.Draw(rig); _ctyRim.Draw(rig); _ctyFill.Draw(rig);
+            _buildGems.Draw(rig); _aiGems.Draw(rig);
             _counts.Update(rig, eye);
             PointsVisible = pts; AiVisible = ai; BuildingVisible = build;
         }
@@ -377,12 +375,12 @@ namespace AtlasVR
             _mat = new Material(Shader.Find("AtlasVR/Ribbon"));
             _mat.renderQueue = 2440; // before the opaque markers, so markers sit on top of the cables
 
-            var disc = Meshes.Disc(12);
-            _landRim = new MarkerSet(disc, true, 4) { sizeWS = 0.0024f };
-            _landCore = new MarkerSet(disc, true, 5) { sizeWS = 0.0018f, minLiftWS = 0.0023f };
-            var a1 = new List<MarkerDef>(); var a2 = new List<MarkerDef>();
-            foreach (var l in d.landings) { a1.Add(new MarkerDef(l.lon, l.lat, 1f, new Color(0, 0, 0, 0.6f))); a2.Add(new MarkerDef(l.lon, l.lat, 1f, new Color(1, 1, 1, 0.85f))); }
-            _landRim.Set(a1); _landCore.Set(a2);
+            // Landing points: small aquamarine spheres.
+            _landRim = new MarkerSet(Meshes.Ball(), true, 4, "AtlasVR/Gem") { sizeWS = 0.0022f, minLiftWS = 0.0013f };
+            _landCore = new MarkerSet(Meshes.Disc(8), true, 5);   // unused; kept empty
+            var a1 = new List<MarkerDef>();
+            foreach (var l in d.landings) a1.Add(new MarkerDef(l.lon, l.lat, 1f, Legend.Aquamarine));
+            _landRim.Set(a1); _landCore.Set(new List<MarkerDef>());
         }
 
         public void SetShow(PkgTeleShow s)

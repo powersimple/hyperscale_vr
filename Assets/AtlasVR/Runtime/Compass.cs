@@ -1,8 +1,7 @@
 // Where you are and which way you face, for low flight.
-//   Compass   a small flat 3D compass at the lower right of the view. The needle points the way
-//             you face; the dial turns under it so N stays on geographic north. It shows only
-//             while you are low (the horizon near the middle of the view) and moving, and folds
-//             away a couple of seconds after you stop.
+//   Compass   a small 3D compass at the right end of the location line in the bottom box:
+//             polished metal rim, see-through glass face. The needle points the way you face;
+//             the dial turns under it so N stays on geographic north. Shown below orbit.
 //   Regions   the state or province, and country, under you (Natural Earth admin-1 areas).
 using System;
 using System.Collections.Generic;
@@ -19,21 +18,24 @@ namespace AtlasVR
         float _shown, _lastMotion = -100f;
         static readonly string[] Points = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
 
-        public Compass(Transform hudRoot)
+        const float Size = 0.62f;   // the compass's scale in meters-per-unit terms (about 8 cm across)
+        float _scale;
+
+        /// The compass sits on an anchor in a HUD canvas; hudRoot gives the frame for its angles.
+        public Compass(Transform hudRoot, Transform anchor)
         {
             var sh = Shader.Find("AtlasVR/Emblem");
             var cyl = Meshes.Cylinder(48);
             _root = new GameObject("Compass").transform;
-            _root.SetParent(hudRoot, false);
-            // Lower right, about 1.1 m out, lying flat and tipped toward you so it reads.
-            Quaternion q = Quaternion.Euler(36f, 42f, 0);   // clear of the bottom bars and the selection panel
-            _root.localPosition = q * Vector3.forward * 1.1f;
-            _root.localRotation = Quaternion.AngleAxis(-38f, Vector3.right);  // face tipped toward the viewer; needle forward
+            _root.SetParent(anchor != null ? anchor : hudRoot, false);
+            // In the canvas: a little in front of it, the face tipped up toward you, the needle pointing ahead.
+            _scale = anchor != null ? Size / Mathf.Max(1e-6f, anchor.lossyScale.x) : Size;
+            _root.localPosition = new Vector3(0, 0, anchor != null ? -40f : 0f);
+            _root.localRotation = Quaternion.Euler(-60f, 0, 0);
 
-            // Body: a dark puck with a light rim.
-            // Body: a glass puck with a glowing rim, translucent so the ground shows through.
-            Glass("Rim", _root, cyl, new Color(0.05f, 0.15f, 0.45f, 0.22f), new Color(0.35f, 0.6f, 1f, 1f), 1.6f, new Vector3(0.128f, 0.014f, 0.128f), Vector3.down * 0.013f);
-            Glass("Face", _root, cyl, new Color(0.02f, 0.05f, 0.16f, 0.55f), new Color(0.3f, 0.5f, 1f, 0.5f), 3f, new Vector3(0.114f, 0.0125f, 0.114f), Vector3.down * 0.0112f);
+            // Body: a polished metal rim around a see-through glass face.
+            Part("Rim", _root, cyl, sh, new Color(0.86f, 0.89f, 0.95f), 0.92f, new Vector3(0.128f, 0.014f, 0.128f), Vector3.down * 0.013f);
+            Glass("Face", _root, cyl, new Color(0.03f, 0.07f, 0.2f, 0.45f), new Color(0.45f, 0.65f, 1f, 0.7f), 2.2f, new Vector3(0.116f, 0.0135f, 0.116f), Vector3.down * 0.0118f);
 
             // Dial: ticks and the cardinal letters, turning together.
             _dial = new GameObject("Dial").transform;
@@ -62,7 +64,7 @@ namespace AtlasVR
                 Quaternion r = Quaternion.Euler(0, i * 90f, 0);
                 go.transform.localPosition = r * Vector3.forward * 0.031f + Vector3.up * 0.0006f;
                 go.transform.localRotation = r * Quaternion.Euler(90f, 0, 0);    // lying on the dial, tops outward
-                go.transform.localScale = Vector3.one * 0.0085f;
+                go.transform.localScale = Vector3.one * 0.017f;
             }
 
             // Needle: points the way you face; red tip forward, pale tail.
@@ -80,9 +82,9 @@ namespace AtlasVR
             _heading = hg.AddComponent<TextMeshPro>();
             _heading.fontSize = 10f; _heading.alignment = TextAlignmentOptions.Center;
             _heading.color = new Color(1f, 0.85f, 0.5f);
-            hg.transform.localPosition = new Vector3(0, 0.002f, 0.08f);
+            hg.transform.localPosition = new Vector3(0, 0.002f, -0.095f);   // on the near side, toward you
             hg.transform.localRotation = Quaternion.Euler(90f, 0, 0);
-            hg.transform.localScale = Vector3.one * 0.0075f;
+            hg.transform.localScale = Vector3.one * 0.016f;
 
             // Draw after the HUD canvases (sorting order 10), which would otherwise paint over the glass and text.
             foreach (var r in _root.GetComponentsInChildren<Renderer>(true)) r.sortingOrder = 11;
@@ -122,17 +124,16 @@ namespace AtlasVR
         static readonly Vector3 LocalLight = new Vector3(0.4f, 0.8f, -0.45f);
         string _lastHeading;
 
-        public void Update(GlobeRig rig, Transform eye, Transform hudRoot, bool moving)
+        /// The heading you face, like "045° NE".
+        public string HeadingText { get { return _lastHeading ?? ""; } }
+
+        public void Update(GlobeRig rig, Transform eye, Transform hudRoot, bool show)
         {
             if (rig == null || eye == null) return;
-            bool low = rig.mode == ViewMode.Flight && rig.ViewHeight < ShowBelow;
-            if (moving) _lastMotion = Time.unscaledTime;
-            bool want = low && Time.unscaledTime - _lastMotion < 2.2f;
-            _shown = Mathf.MoveTowards(_shown, want ? 1f : 0f, Time.unscaledDeltaTime * 4f);
+            _shown = Mathf.MoveTowards(_shown, show ? 1f : 0f, Time.unscaledDeltaTime * 4f);
             bool active = _shown > 0.001f;
             if (_root.gameObject.activeSelf != active) _root.gameObject.SetActive(active);
-            if (!active) return;
-            _root.localScale = Vector3.one * Mathf.SmoothStep(0f, 1f, _shown);
+            _root.localScale = Vector3.one * (_scale * Mathf.SmoothStep(0f, 1f, _shown));
             Vector3 lw = hudRoot.rotation * LocalLight;   // lit in the display's frame, so the light turns with you
             foreach (var m in Lit) m.SetVector("_LightDir", lw);
 
@@ -149,7 +150,7 @@ namespace AtlasVR
             _needle.localRotation = Quaternion.Euler(0, aFace, 0);
             float bearing = Mathf.Repeat(aFace - aNorth, 360f);
             string h = Mathf.RoundToInt(bearing) % 360 + "°  " + Points[Mathf.RoundToInt(bearing / 45f) % 8];
-            if (h != _lastHeading) { _heading.text = h; _lastHeading = h; }
+            if (h != _lastHeading) { _lastHeading = h; _heading.text = h; }
         }
     }
 

@@ -281,7 +281,8 @@ namespace AtlasVR
             if (mode != ViewMode.Flight) return _placeRot * yaw;
             // Higher up, the Earth tilts up in front of you, so you look ahead rather than down. The
             // ramp runs on a log scale, so the globe stays in front until you are low over the ground.
-            float up = 68f * Mathf.SmoothStep(0f, 1f, LogRamp(Height, 4000, 1.5e6));
+            // Out in orbit it stands straight ahead, the equator level with your eyes.
+            float up = 90f * Mathf.SmoothStep(0f, 1f, LogRamp(Height, 4000, 3.0e6));
             return Quaternion.Euler(-up, 0, 0) * yaw;
         }
 
@@ -307,10 +308,12 @@ namespace AtlasVR
 
         public void Climb(double factor) { SetPose(Lon, Lat, mode == ViewMode.Flight ? GroundHeight + (Height - GroundHeight) * factor : Height * factor, Heading); }
         public void Turn(double degrees) { SetPose(Lon, Lat, Height, Heading + degrees); }
+        /// Spins the globe on its axis (from orbit).
+        public void Spin(double degrees) { SetPose(Lon + degrees, Lat, Height, Heading); }
 
         void LateUpdate()
         {
-            if (Georef == null) return;
+            if (Georef == null || AtlasVRApp.Paused) return;
             if (_spinDegPerSec > 0f) SetPose(Lon + _spinDegPerSec * Time.deltaTime, Lat, Height, Heading);
             if (mode == ViewMode.Flight) SampleGround();
 

@@ -238,6 +238,20 @@ namespace AtlasVR
             else { t.Add(i); t.Add(i + 2); t.Add(i + 1); t.Add(i); t.Add(i + 3); t.Add(i + 2); }
         }
 
+        static Mesh _ball;
+        /// A sphere of diameter 1 (the markers' size convention), shared.
+        public static Mesh Ball()
+        {
+            if (_ball != null) return _ball;
+            var m = Sphere(12, 20);
+            var v = m.vertices;
+            for (int i = 0; i < v.Length; i++) v[i] *= 0.5f;
+            m.vertices = v;
+            m.RecalculateBounds();
+            _ball = m;
+            return m;
+        }
+
         /// Unit sphere (radius 1).
         public static Mesh Sphere(int rings, int segments)
         {

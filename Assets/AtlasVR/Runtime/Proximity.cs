@@ -12,7 +12,7 @@ namespace AtlasVR
     {
         public bool enabled = true;
         const int Max = 12;
-        const double ShowBelow = 350000;   // view height (m)
+        const double ShowBelow = 600000;   // view height (m): labels come in as you fly in
 
         readonly Transform _root;
         readonly List<TextMeshPro> _pool = new List<TextMeshPro>();
@@ -40,6 +40,8 @@ namespace AtlasVR
                 t.alignment = TextAlignmentOptions.Bottom;
                 t.textWrappingMode = TextWrappingModes.NoWrap;
                 t.color = Color.white;
+                t.rectTransform.pivot = new Vector2(0.5f, 0f);
+                t.rectTransform.sizeDelta = new Vector2(30f, 0f);
                 UI.OverText(t);
                 go.SetActive(false);
                 _pool.Add(t);
@@ -138,6 +140,71 @@ namespace AtlasVR
                 t.rotation = Quaternion.LookRotation(t.position - eye.position, Vector3.up);
                 t.localScale = Vector3.one * s;
             }
+        }
+    }
+}
+
+namespace AtlasVR
+{
+    /// The label for what the laser points at, and the selection's label. The selection keeps its
+    /// label at any height; flying low among other labels it stands out in a larger, gold font.
+    public class FocusLabels
+    {
+        readonly TextMeshPro _hover, _sel;
+        PickInfo _hoverShown, _selShown;
+
+        public FocusLabels(Transform parent)
+        {
+            _hover = Make("Hover label", parent, Color.white);
+            _sel = Make("Selected label", parent, new Color(1f, 0.86f, 0.45f));
+        }
+
+        static TextMeshPro Make(string name, Transform parent, Color c)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var t = go.AddComponent<TextMeshPro>();
+            t.fontSize = 10f;
+            t.alignment = TextAlignmentOptions.Bottom;
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.color = c;
+            t.rectTransform.pivot = new Vector2(0.5f, 0f);   // the label's bottom sits just above the marker
+            t.rectTransform.sizeDelta = new Vector2(30f, 0f);
+            UI.OverText(t);
+            go.SetActive(false);
+            return t;
+        }
+
+        public void Update(GlobeRig rig, Transform eye, PickInfo hover, PickInfo selected)
+        {
+            bool low = rig.ViewHeight < 350000;
+            if (hover != null && selected != null && hover.title == selected.title) hover = null;
+            Place(_sel, ref _selShown, selected, rig, eye, low ? 1.6f : 1.15f);
+            Place(_hover, ref _hoverShown, hover, rig, eye, 1f);
+        }
+
+        static void Place(TextMeshPro t, ref PickInfo shown, PickInfo p, GlobeRig rig, Transform eye, float size)
+        {
+            bool on = p != null && rig.mode == ViewMode.Flight && (p.lon != 0 || p.lat != 0);
+            Vector3 w = Vector3.zero, up = Vector3.up;
+            if (on)
+            {
+                w = rig.WorldOf(p.lon, p.lat, Math.Max(0, rig.GroundHeight));
+                up = (w - rig.BallCenter).normalized;
+                on = rig.Visible(w, up, eye.position);
+            }
+            if (t.gameObject.activeSelf != on) t.gameObject.SetActive(on);
+            if (!on) return;
+            if (p != shown)
+            {
+                shown = p;
+                t.text = "<b>" + Hud.Esc(p.title) + "</b>" + (string.IsNullOrEmpty(p.subtitle) ? "" : "\n<size=70%><color=#BCCBFF>" + Hud.Esc(p.subtitle) + "</color></size>");
+            }
+            float dist = Vector3.Distance(eye.position, w);
+            float s = 0.0105f * dist * size;
+            t.transform.position = w + up * s * 1.6f;
+            t.transform.rotation = Quaternion.LookRotation(t.transform.position - eye.position, Vector3.up);
+            t.transform.localScale = Vector3.one * s;
         }
     }
 }

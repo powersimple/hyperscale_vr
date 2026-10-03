@@ -69,6 +69,8 @@ namespace AtlasVR
 
         /// Counts another rect (a drop-down that hangs outside its panel) as UI for the laser.
         public static void RegisterHitRect(RectTransform rt) { if (rt != null && !Canvases.Contains(rt)) Canvases.Add(rt); }
+        /// Text-only canvases the laser should pass through.
+        public static void UnregisterHitRect(RectTransform rt) { Canvases.Remove(rt); }
 
         public static RectTransform Rect(string name, Transform parent)
         {
@@ -197,7 +199,6 @@ namespace AtlasVR
                 _slabMat = new Material(Shader.Find("AtlasVR/Glass"));
                 _slabMat.SetColor("_Color", new Color(0.03f, 0.08f, 0.24f, 0.24f));
                 _slabMat.SetColor("_RimColor", new Color(0.35f, 0.6f, 1f, 0.8f));
-                _slabMat.SetColor("_SheenColor", new Color(1f, 0.85f, 0.45f, 0.7f));
                 _slabMat.SetFloat("_RimPower", 2.2f);
                 _slabMat.renderQueue = 2990;   // before the canvases (3000)
             }

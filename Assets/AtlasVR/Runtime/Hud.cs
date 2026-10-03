@@ -1,13 +1,12 @@
-// The heads-up display. Panels sit around the edges of the view and the center stays clear.
+// The heads-up display. Nothing sits in the straight-ahead view.
 //   Look up        the deck line, the slide's title and subtitle
-//   Top of view    story navigation: a small button per story, where you are, altitude
 //   Left           the story text with its Explore links; the stat boxes beneath it
-//   Upper right    filters: a checkbox list with full labels; sub-filters expand in place
+//   Upper right    filters, which double as the legend (each row's gem sphere or icon)
 //   Lower right    data on the selected marker (hidden when nothing is selected)
-//   Bottom of view Back, the progress bar and slider, Next
-//   Look down      the sources, then the imagery credits below them
-// The frame follows the head's heading lazily: turn the head up to 60 degrees to read across
-// the panels; turn further and it comes along. A hides and shows it all; nothing is lost.
+//   Look down      what the laser points at; then one box with the filter state, the location
+//                  line and compass, the stories slider and the slides slider, previous and next
+//                  arrows at its sides; below it the sources, the credits, the logo on the floor
+// The frame turns with you only past 80 degrees of head turn. A hides and shows it all.
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -28,19 +27,20 @@ namespace AtlasVR
         float _yaw;
         bool _snap = true, _following;
 
-        readonly Canvas _location;
-        readonly TextMeshProUGUI _locationText;
-        string _locationShown;
-        readonly Canvas _titleBand, _nav, _left, _stats, _filtersPanel, _info, _bottom, _sources, _loading;
+        readonly Canvas _titleBand, _left, _stats, _filtersPanel, _info, _bottom, _sources, _loading, _pointing;
+        readonly TextMeshProUGUI _locText, _pointText;
+        readonly RectTransform _filterRow, _mainNotches;
+        readonly Slider _mainSlider;
+        public readonly RectTransform compassAnchor;
+        string _locShown, _pointShown;
         public Canvas creditsCanvas;
-        readonly TextMeshProUGUI _deckLine, _title, _subtitle, _chapter, _body, _infoText, _sourcesText, _status, _storyLine, _progressLabel, _loadingText;
+        readonly TextMeshProUGUI _deckLine, _title, _subtitle, _chapter, _body, _infoText, _sourcesText, _storyLine, _loadingText;
         readonly ScrollRect _bodyScroll, _sourcesScroll;
         readonly RectTransform _statRow, _explore, _filterList;
         readonly Image _image, _loadingFill;
         readonly RectTransform _notches;
         readonly Slider _slider;
         readonly Dictionary<string, Image> _checks = new Dictionary<string, Image>();
-        readonly Dictionary<string, Button> _trackBtns = new Dictionary<string, Button>();
         readonly Dictionary<string, GameObject> _subRows = new Dictionary<string, GameObject>();   // sub-filter row -> parent key
         readonly Dictionary<string, string> _parentOf = new Dictionary<string, string>();
         readonly Dictionary<string, TextMeshProUGUI> _arrows = new Dictionary<string, TextMeshProUGUI>();
@@ -56,6 +56,10 @@ namespace AtlasVR
         public event Action<PkgStat> StatPressed;
 
         const float Dist = 1.5f, RowH = 32f, FilterW = 340f;
+        // The bottom box: 15% wider than before, and the bars beneath it close up.
+        const float BoxW = 1220f, BoxH = 300f, SliderW = 1000f, DegPerUnit = 0.0573f;   // degrees per canvas unit at 1.5 m
+        const float BoxPitch = -49f, SourcesPitch = BoxPitch - BoxH * DegPerUnit * 0.5f - 0.6f - 104f * DegPerUnit * 0.5f;
+        public const float CreditsPitch = SourcesPitch - 104f * DegPerUnit * 0.5f - 0.6f - 96f * DegPerUnit * 0.5f;
         public float followDeadZone = 80f;   // the side panels sit about 60 degrees out
         static readonly Color CheckOn = UI.Emerald, CheckOff = new Color(0.05f, 0.1f, 0.28f, 0.9f);
         static readonly Regex Url = new Regex(@"\s*(https?://|www\.)\S+", RegexOptions.Compiled);
@@ -76,26 +80,6 @@ namespace AtlasVR
             _subtitle = UI.Label("Subtitle", _titleBand.transform, "", 23, UI.Muted, FontStyles.Normal, TextAlignmentOptions.Top);
             UI.Place(_subtitle.rectTransform, 40, 112, 880, 72);
             _subtitle.enableAutoSizing = true; _subtitle.fontSizeMin = 17; _subtitle.fontSizeMax = 23;
-
-            // Top of the view: story navigation, small and open: every story is a button.
-            _nav = Panel("Story navigation", new Vector2(1040, 78), 0f, 33.3f);
-            var row = UI.Rect("Stories", _nav.transform); UI.Place(row, 14, 9, 1012, 30);
-            var hr = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            hr.spacing = 6; hr.childControlWidth = true; hr.childControlHeight = true; hr.childForceExpandWidth = true; hr.childForceExpandHeight = true;
-            if (pkg.deck != null && pkg.deck.tracks != null)
-                foreach (var t in pkg.deck.tracks)
-                {
-                    string id = t.id;
-                    var tb = UI.Btn("Track " + id, row, t.id == "main" ? "Main story" : t.title, 13, () => { if (OpenTrack != null) OpenTrack(id); }, StoryOff);
-                    _trackBtns[id] = tb;
-                }
-            _storyLine = UI.Label("Story", _nav.transform, "", 13, UI.Text, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            UI.Place(_storyLine.rectTransform, 20, 46, 560, 24);
-            _storyLine.textWrappingMode = TextWrappingModes.NoWrap; _storyLine.overflowMode = TextOverflowModes.Ellipsis;
-            _progressLabel = UI.Label("Count", _nav.transform, "", 13, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-            UI.Place(_progressLabel.rectTransform, 588, 46, 150, 24);
-            _status = UI.Label("Status", _nav.transform, "", 13, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
-            UI.Place(_status.rectTransform, 746, 46, 274, 24);
 
             // Left: the story, then the stats beneath it.
             _left = Panel("Story", new Vector2(540, 560), -64f, 1f);
@@ -130,30 +114,45 @@ namespace AtlasVR
             var infoContent = UI.Scroll("Scroll", _info.transform, out ScrollRect infoScroll); UI.Stretch((RectTransform)infoScroll.transform, 18, 18, 16, 16);
             _infoText = UI.Label("Text", infoContent, "", 18, UI.Text); _infoText.gameObject.AddComponent<LayoutElement>();
 
-            // Looking down, each bar faces you at its angle: the story slider at 45 degrees, the
-            // sources at 60, the credits at 75, and the silver logo flat on the floor below.
-            _bottom = Panel("Navigation", new Vector2(1060, 132), 0f, -45f);
-            var back = UI.Btn("Back", _bottom.transform, "◄", 40, () => { if (Back != null) Back(); }); UI.Place((RectTransform)back.transform, 14, 30, 76, 76);
-            var next = UI.Btn("Next", _bottom.transform, "►", 40, () => { if (Next != null) Next(); }, new Color(0.06f, 0.62f, 0.38f, 0.6f)); UI.Place((RectTransform)next.transform, 970, 30, 76, 76);
-            // Chapter labels above the notches, the notches, then the slider itself.
-            _notches = UI.Rect("Notches", _bottom.transform); UI.Place(_notches, 116, 12, 828, 72);
-            _slider = UI.Slider("Slider", _bottom.transform, 1, val => { if (!_suppress && Scrub != null) Scrub((int)val); }); UI.Place((RectTransform)_slider.transform, 116, 80, 828, 40);
+            // Looking down: one box with, from the top, the filter state, the location line (with
+            // the compass at its right end), the stories slider, and the slides slider; the
+            // previous and next arrows at its sides. Above it, what the laser points at; below it,
+            // the sources, then the credits, then the silver logo on the floor.
+            _bottom = Panel("Navigation", new Vector2(BoxW, BoxH), 0f, BoxPitch);
+            _filterRow = UI.Rect("Filter state", _bottom.transform); UI.Place(_filterRow, 110, 12, BoxW - 220, 30);
+            var fr = _filterRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            fr.spacing = 14; fr.childControlWidth = true; fr.childControlHeight = true; fr.childForceExpandWidth = false; fr.childForceExpandHeight = false; fr.childAlignment = TextAnchor.MiddleLeft;
+            _locText = UI.Label("Location", _bottom.transform, "", 13, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            UI.Place(_locText.rectTransform, 110, 46, BoxW - 330, 26);
+            _locText.textWrappingMode = TextWrappingModes.NoWrap; _locText.overflowMode = TextOverflowModes.Ellipsis;
+            compassAnchor = UI.Rect("Compass", _bottom.transform); UI.Place(compassAnchor, BoxW - 210, 30, 60, 60);
+            compassAnchor.pivot = new Vector2(0.5f, 0.5f); compassAnchor.anchoredPosition = new Vector2(BoxW - 165, -66);
+            // Stories.
+            _mainNotches = UI.Rect("Story notches", _bottom.transform); UI.Place(_mainNotches, 110, 78, SliderW, 50);
+            _mainSlider = UI.Slider("Stories", _bottom.transform, 1, val => { if (!_suppress) PickTrack((int)val); }); UI.Place((RectTransform)_mainSlider.transform, 110, 126, SliderW, 36);
+            // Slides of the current story.
+            _notches = UI.Rect("Slide notches", _bottom.transform); UI.Place(_notches, 110, 168, SliderW, 72);
+            _slider = UI.Slider("Slides", _bottom.transform, 1, val => { if (!_suppress && Scrub != null) Scrub((int)val); }); UI.Place((RectTransform)_slider.transform, 110, 238, SliderW, 36);
+            _storyLine = UI.Label("Position", _bottom.transform, "", 12, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+            UI.Place(_storyLine.rectTransform, 110, 276, SliderW, 20);
+            // The arrows are the buttons: 3D gold prisms, no boxes.
+            Arrow(_bottom, 55, BoxH * 0.55f, false, () => { if (Back != null) Back(); });
+            Arrow(_bottom, BoxW - 55, BoxH * 0.55f, true, () => { if (Next != null) Next(); });
+            if (pkg.deck != null && pkg.deck.tracks != null) BuildStoryNotches(pkg.deck.tracks);
 
-            // The sources (plain text, no links).
-            _sources = Panel("Sources", new Vector2(1060, 110), 0f, -60f);
+            // What the laser points at, just above the box.
+            _pointing = UI.WorldCanvas("Pointing at", root, new Vector2(BoxW, 40), _cam);
+            UI.UnregisterHitRect((RectTransform)_pointing.transform);   // the laser passes through it
+            _pointText = UI.Label("Text", _pointing.transform, "", 16, UI.Text, FontStyles.Bold, TextAlignmentOptions.Center);
+            UI.Stretch(_pointText.rectTransform);
+            _pointText.textWrappingMode = TextWrappingModes.NoWrap; _pointText.overflowMode = TextOverflowModes.Ellipsis;
+            Place(_pointing.transform, 0f, BoxPitch + BoxH * DegPerUnit * 0.5f + 1.6f);
+            _pointing.gameObject.SetActive(false);
+
+            // The sources (plain text, no links), right below the box.
+            _sources = Panel("Sources", new Vector2(BoxW, 104), 0f, SourcesPitch);
             var srcContent = UI.Scroll("Scroll", _sources.transform, out _sourcesScroll); UI.Stretch((RectTransform)_sourcesScroll.transform, 20, 20, 12, 12);
             _sourcesText = UI.Label("Text", srcContent, "", 14, UI.Muted); _sourcesText.gameObject.AddComponent<LayoutElement>();
-
-            // Upper right, above the filters: the place under you and its coordinates.
-            // Same width and center as the filter panel, so the right-aligned text ends at its right edge;
-            // a long name runs out to the left.
-            _location = UI.WorldCanvas("Location", root, new Vector2(FilterW, 58), _cam);
-            ((RectTransform)_location.transform).pivot = new Vector2(0.5f, 0f);
-            _locationText = UI.Label("Text", _location.transform, "", 17, UI.Text, FontStyles.Bold, TextAlignmentOptions.BottomRight);
-            UI.Stretch(_locationText.rectTransform, 0, 4, 0, 0);
-            _locationText.textWrappingMode = TextWrappingModes.NoWrap; _locationText.overflowMode = TextOverflowModes.Overflow;
-            Place(_location.transform, 59f, 23f);
-            _location.gameObject.SetActive(false);
 
             // While the Earth loads.
             _loading = Panel("Loading", new Vector2(520, 70), 0f, 8f);
@@ -189,7 +188,7 @@ namespace AtlasVR
             creditsCanvas = credits;
             credits.transform.SetParent(root, false);
             UI.Slab(credits);
-            Place(credits.transform, 0f, -75f);
+            Place(credits.transform, 0f, CreditsPitch);
         }
 
         static void Place(Transform t, float yaw, float pitch)
@@ -242,15 +241,13 @@ namespace AtlasVR
                 x += 32;
             }
             // The story's icon for the category, as on the globe.
-            string kind = IconFor(key);
-            if (kind != null && IconSet.Atlas != null)
+            // The legend: how the category looks on the globe (its gem sphere or its icon).
+            float sz = indent > 0 ? 20f : 24f;
+            var sw = Legend.Swatch(key, row, sz);
+            if (sw != null)
             {
-                var ic = UI.Rect("Icon", row).gameObject.AddComponent<RawImage>();
-                ic.texture = IconSet.Atlas; ic.uvRect = IconSet.CellRect(kind); ic.raycastTarget = false;
-                var irt = ic.rectTransform;
-                irt.anchorMin = irt.anchorMax = new Vector2(0, 0.5f); irt.pivot = new Vector2(0, 0.5f);
-                float sz = indent > 0 ? 20f : 24f;
-                irt.sizeDelta = new Vector2(sz, sz); irt.anchoredPosition = new Vector2(x, 0);
+                sw.anchorMin = sw.anchorMax = new Vector2(0, 0.5f); sw.pivot = new Vector2(0, 0.5f);
+                sw.anchoredPosition = new Vector2(x, 0);
                 x += sz + 6f;
             }
             var t = UI.Label("Label", row, label, indent > 0 ? 16 : 18, indent > 0 ? UI.Muted : UI.Text, indent > 0 ? FontStyles.Normal : FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
@@ -269,23 +266,6 @@ namespace AtlasVR
             if (checkable) b.onClick.AddListener(() => _filters.Toggle(key));
             else if (expandable) b.onClick.AddListener(() => ToggleExpand(key));
             return row.gameObject;
-        }
-
-        static string IconFor(string key)
-        {
-            if (key.StartsWith("power.")) return key.Substring(6);
-            switch (key)
-            {
-                case "dc": case "dc.points": return "dc";
-                case "ai": case "ai.operating": return "campus";
-                case "ai.building": return "planned";
-                case "cables": case "cables.systems": return "cable";
-                case "cables.landings": return "landing";
-                case "power": return "gas";
-                case "flows": return "stream";
-                case "sites": return "anchor";
-                default: return null;
-            }
         }
 
         void ToggleExpand(string key)
@@ -341,6 +321,20 @@ namespace AtlasVR
 
         void Refresh()
         {
+            // The filter state in the bottom box: what is on, with its legend swatch.
+            UI.Clear(_filterRow);
+            foreach (var c in _filters.categories)
+            {
+                if (!_filters.On(c.key) || !Legend.Has(c.key)) continue;
+                var chip = UI.Rect("Chip " + c.key, _filterRow);
+                var h = chip.gameObject.AddComponent<HorizontalLayoutGroup>();
+                h.spacing = 5; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = false; h.childAlignment = TextAnchor.MiddleLeft;
+                var sw = Legend.Swatch(c.key, chip, 18f);
+                if (sw != null) { var le = sw.gameObject.AddComponent<LayoutElement>(); le.preferredWidth = 18; le.preferredHeight = 18; }
+                var t = UI.Label("Label", chip, c.label, 12, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+                t.textWrappingMode = TextWrappingModes.NoWrap;
+                t.gameObject.AddComponent<LayoutElement>().preferredWidth = t.preferredWidth + 2;
+            }
             foreach (var kv in _checks)
             {
                 bool on = _filters.On(kv.Key);
@@ -449,77 +443,134 @@ namespace AtlasVR
 
         public void ResetSources() { ShowSlideSources(); }
 
+        PkgTrack[] _tracks;
+        string _trackShown, _layoutTrack;
+
         public void SetPosition(string storyTitle, int index, int count)
         {
             _suppress = true;
             _slider.maxValue = Mathf.Max(1, count - 1);
             _slider.value = index;
             _suppress = false;
-            _storyLine.text = Esc(storyTitle);
-            _progressLabel.text = (index + 1) + " of " + count;
+            _storyLine.text = Esc(storyTitle) + "   " + (index + 1) + " of " + count;
         }
 
-        static readonly Color StoryOff = new Color(0.1f, 0.3f, 0.82f, 0.45f), StoryOn = new Color(0.92f, 0.1f, 0.32f, 0.85f);
-        string _trackShown;
-
-        /// Lights the current story's button.
+        /// The stories slider follows the story you are in.
         public void SetTrack(string id)
         {
-            if (id == _trackShown) return;
+            if (id == _trackShown || _tracks == null) return;
             _trackShown = id;
-            foreach (var kv in _trackBtns) kv.Value.targetGraphic.color = kv.Key == id ? StoryOn : StoryOff;
+            _suppress = true;
+            for (int i = 0; i < _tracks.Length; i++) if (_tracks[i].id == id) _mainSlider.value = i;
+            _suppress = false;
         }
 
-        string _layoutTrack;
+        void PickTrack(int i)
+        {
+            if (_tracks == null || i < 0 || i >= _tracks.Length || _tracks[i].id == _trackShown) return;
+            if (OpenTrack != null) OpenTrack(_tracks[i].id);
+        }
 
-        /// Notches on the slider, one per slide of the current story, with the chapter names (small)
-        /// above the notch where each chapter starts.
+        void BuildStoryNotches(PkgTrack[] tracks)
+        {
+            _tracks = tracks;
+            _mainSlider.maxValue = Mathf.Max(1, tracks.Length - 1);
+            var labels = new List<KeyValuePair<int, string>>();
+            for (int i = 0; i < tracks.Length; i++) labels.Add(new KeyValuePair<int, string>(i, tracks[i].id == "main" ? "Main story" : tracks[i].title));
+            Notches(_mainNotches, tracks.Length, labels, true);
+        }
+
+        /// The slides slider: a notch per slide, the chapter names (small) where each chapter starts.
         public void SetTrackLayout(PkgTrack t)
         {
             if (t == null || t.beats == null || t.id == _layoutTrack) return;
             _layoutTrack = t.id;
-            UI.Clear(_notches);
             int n = t.beats.Length;
-            float w = 828f, inset = 13f, span = w - inset * 2f;
-            var starts = new List<int>();
-            for (int i = 0; i < n; i++) if (i == 0 || t.beats[i].chapter != t.beats[i - 1].chapter) starts.Add(i);
+            var labels = new List<KeyValuePair<int, string>>();
+            for (int i = 0; i < n; i++)
+                if (i == 0 || t.beats[i].chapter != t.beats[i - 1].chapter)
+                {
+                    var ch = _pkg.Chapter(t.beats[i].chapter);
+                    labels.Add(new KeyValuePair<int, string>(i, ch != null ? (!string.IsNullOrEmpty(ch.label) ? ch.label : ch.title) : ""));
+                }
+            Notches(_notches, n, labels, false);
+        }
+
+        /// Notches across a slider's travel; labelled notches are taller and gold. Centered labels
+        /// sit over their notch (the stories); left-aligned ones run to the next label (chapters).
+        void Notches(RectTransform parent, int n, List<KeyValuePair<int, string>> labels, bool centered)
+        {
+            UI.Clear(parent);
+            float w = SliderW, inset = 13f, span = w - inset * 2f;
+            Func<int, float> X = i => inset + (n <= 1 ? 0f : span * i / (n - 1));
+            var major = new HashSet<int>();
+            foreach (var l in labels) major.Add(l.Key);
             for (int i = 0; i < n; i++)
             {
-                float x = inset + (n <= 1 ? 0f : span * i / (n - 1));
-                bool major = starts.Contains(i);
-                var tick = UI.Box("Notch " + i, _notches, major ? new Color(1f, 0.82f, 0.35f, 0.9f) : new Color(0.7f, 0.8f, 1f, 0.45f));
+                bool m = major.Contains(i);
+                var tick = UI.Box("Notch " + i, parent, m ? new Color(1f, 0.82f, 0.35f, 0.9f) : new Color(0.7f, 0.8f, 1f, 0.45f));
                 tick.raycastTarget = false;
                 var rt = tick.rectTransform;
                 rt.anchorMin = rt.anchorMax = new Vector2(0, 0); rt.pivot = new Vector2(0.5f, 0);
-                rt.sizeDelta = new Vector2(major ? 3f : 2f, major ? 18f : 9f); rt.anchoredPosition = new Vector2(x, 0);
+                rt.sizeDelta = new Vector2(m ? 3f : 2f, m ? 16f : 8f); rt.anchoredPosition = new Vector2(X(i), 0);
             }
-            for (int k = 0; k < starts.Count; k++)
+            for (int k = 0; k < labels.Count; k++)
             {
-                int i = starts[k], j = k + 1 < starts.Count ? starts[k + 1] : n;
-                float x0 = inset + (n <= 1 ? 0f : span * i / (n - 1));
-                float x1 = j >= n ? w : inset + span * j / (n - 1);
-                if (x1 - x0 < 34f) continue;   // too narrow to label
-                var ch = _pkg.Chapter(t.beats[i].chapter);
-                string name = ch != null ? (!string.IsNullOrEmpty(ch.label) ? ch.label : ch.title) : "";
-                var lbl = UI.Label("Chapter " + k, _notches, Esc(name), 11, UI.Muted, FontStyles.Normal, TextAlignmentOptions.BottomLeft);
+                int i = labels[k].Key, j = k + 1 < labels.Count ? labels[k + 1].Key : n;
+                float x0 = X(i), x1 = j >= n ? w : X(j);
+                float width = centered ? Mathf.Max(60f, span / Mathf.Max(1, n - 1) - 4f) : x1 - x0 - 6f;
+                if (!centered && width < 34f) continue;   // too narrow to label
+                var lbl = UI.Label("Label " + k, parent, Esc(labels[k].Value), 11, UI.Muted, FontStyles.Normal,
+                    centered ? TextAlignmentOptions.Bottom : TextAlignmentOptions.BottomLeft);
                 var rt = lbl.rectTransform;
-                rt.anchorMin = rt.anchorMax = new Vector2(0, 0); rt.pivot = new Vector2(0, 0);
-                rt.sizeDelta = new Vector2(x1 - x0 - 6f, 36f); rt.anchoredPosition = new Vector2(x0 - 1f, 22f);
+                rt.anchorMin = rt.anchorMax = new Vector2(0, 0); rt.pivot = new Vector2(centered ? 0.5f : 0f, 0);
+                rt.sizeDelta = new Vector2(width, centered ? 30f : 50f); rt.anchoredPosition = new Vector2(centered ? x0 : x0 - 1f, 19f);
                 lbl.textWrappingMode = TextWrappingModes.Normal; lbl.overflowMode = TextOverflowModes.Ellipsis;
             }
         }
 
-        public void SetStatus(string s) { if (_status.text != s) _status.text = s; }
-
-        /// The place under you (small) with its coordinates beneath (smaller); null hides it.
-        public void SetLocation(string place, string coords)
+        /// The location line: region, country, coordinates, heading, altitude.
+        public void SetLocation(string line)
         {
-            bool on = place != null;
-            if (_location.gameObject.activeSelf != on) _location.gameObject.SetActive(on);
-            if (!on) return;
-            string s = Esc(place) + "\n<size=13><color=#BCCBFF>" + Esc(coords) + "</color></size>";
-            if (s != _locationShown) { _locationText.text = s; _locationShown = s; }
+            string s = line ?? "";
+            if (s != _locShown) { _locText.text = Esc(s); _locShown = s; }
         }
+
+        /// What the laser is on, above the box ("Nuclear power plant, Susquehanna, Pennsylvania, USA").
+        public void SetPointing(string line)
+        {
+            bool on = !string.IsNullOrEmpty(line);
+            if (_pointing.gameObject.activeSelf != on) _pointing.gameObject.SetActive(on);
+            if (on && line != _pointShown) { _pointText.text = Esc(line); _pointShown = line; }
+        }
+
+        // A previous/next button: a gold 3D prism over an invisible hit area.
+        void Arrow(Canvas c, float x, float y, bool right, UnityEngine.Events.UnityAction onClick)
+        {
+            var hit = UI.Box(right ? "Next" : "Back", c.transform, new Color(1, 1, 1, 0.001f));
+            var rt = hit.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0, 1); rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(90, 110); rt.anchoredPosition = new Vector2(x, -y);
+            var b = hit.gameObject.AddComponent<Button>();
+            var colors = b.colors; colors.highlightedColor = new Color(1, 1, 1, 30f); b.colors = colors;   // a faint plate on hover
+            b.targetGraphic = hit;
+            b.onClick.AddListener(onClick);
+            var go = new GameObject("Arrow");
+            go.transform.SetParent(rt, false);
+            go.layer = c.gameObject.layer;
+            go.AddComponent<MeshFilter>().sharedMesh = _prism ?? (_prism = Meshes.Cylinder(3));
+            var mat = new Material(Shader.Find("AtlasVR/Emblem"));
+            mat.SetColor("_Color", new Color(1f, 0.8f, 0.35f));
+            mat.SetFloat("_Metal", 0.85f);
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.sortingOrder = 11;   // after the canvas
+            // The prism's axis points at you, one corner toward its direction.
+            go.transform.localRotation = Quaternion.Euler(0, 0, right ? 0f : 180f) * Quaternion.Euler(-90f, 0, 0);
+            go.transform.localPosition = new Vector3(right ? -6f : 6f, 0, -2f);
+            go.transform.localScale = new Vector3(78f, 16f, 78f);
+        }
+        static Mesh _prism;
 
         /// Shows the loading card with a percentage, or hides it (pass a negative value).
         float _noticeUntil;

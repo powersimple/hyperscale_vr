@@ -37,6 +37,8 @@ namespace AtlasVR
         public float turbo = 4f;
         [Tooltip("Degrees the laser is tipped up from the controller, so a relaxed hand at your side aims straight ahead.")]
         public float laserPitchUp = 32f;
+        [Tooltip("The line under the title that floats over the North Pole when zoomed out.")]
+        public string subtitleOverGlobe = "Public Media and the Immersive Economy";
         [Tooltip("Speed multiplier while the left grip is held.")]
         public float precision = 0.25f;
         public Comfort.Mode comfortMode = Comfort.Mode.Vignette;
@@ -66,6 +68,12 @@ namespace AtlasVR
         Compass _compass;
         Regions _regions;
         bool _northing, _moving;
+        float _spinVel;
+        public double zoomOutHeight = 2.2e7;
+        OrbitTitle _orbitTitle;
+        ControlsGuide _guide;
+        FocusLabels _focus;
+        PhotoCapture _photo;
         float _placeNext;
         Branding _branding;
         readonly List<IPickable> _pickables = new List<IPickable>();
@@ -144,7 +152,11 @@ namespace AtlasVR
             _credits = new VRCredits(null, _cam, "Data centers: PeeringDB. AI compute: Epoch AI. Submarine cables: TeleGeography (CC BY-NC-SA 3.0).");
             _hud.PlaceCredits(_credits.canvas);
             _branding = new Branding(_hud.root, _cam);
-            _compass = new Compass(_hud.root);
+            _compass = new Compass(_hud.root, _hud.compassAnchor);
+            _orbitTitle = new OrbitTitle(_pkg.deck != null ? _pkg.deck.title : "", subtitleOverGlobe);
+            _guide = new ControlsGuide(_hud.root, _cam);
+            _focus = new FocusLabels(transform);
+            _photo = new PhotoCapture(_eye);
             _regions = new Regions(_pkg.regions);
             _hud.ShowInfo(null, null);
             _spectator = new Spectator(_eye);
@@ -153,6 +165,7 @@ namespace AtlasVR
             Recenter();
             if (introDescent) _rig.SetPose(-30, 20, 4.0e7, 0);
             GoTo("main", 0, true);
+            Intro(true);   // start on the intro
         }
 
         // ---------------------------------------------------------------- rig
@@ -230,6 +243,7 @@ namespace AtlasVR
 
         void GoTo(string track, int index, bool instant = false)
         {
+            _atIntro = false;
             var t = Track(track);
             if (t == null || t.beats == null || t.beats.Length == 0) return;
             _track = t.id;
@@ -296,6 +310,7 @@ namespace AtlasVR
 
         void Next()
         {
+            if (_atIntro) { _atIntro = false; _hud.Visible = true; GoTo(_track, _index); return; }   // from the intro: play the current slide
             var t = Track(_track);
             if (t == null || t.beats == null) return;
             if (_index < t.beats.Length - 1) { GoTo(_track, _index + 1); return; }
@@ -304,6 +319,7 @@ namespace AtlasVR
 
         void Prev()
         {
+            _atIntro = false;
             if (_index > 0) { GoTo(_track, _index - 1); return; }
             if (_history.Count > 0) { var h = _history.Pop(); GoTo(h.Key, h.Value); }
         }
@@ -435,22 +451,30 @@ namespace AtlasVR
         }
 
         // ---------------------------------------------------------------- frame
+        /// While the Quest system menu is open the app loses focus: everything holds still.
+        public static bool Paused { get; private set; }
+
         void Update()
         {
             if (_rig == null || _in == null) return;
+            Paused = _xr && !Application.isFocused;
+            if (Paused) { _laser.Set(false, Vector3.zero, Vector3.zero, false, _eye); return; }
             float dt = Time.deltaTime;
 
             // Buttons.
             //   A          heads-up display on and off (state kept)
             //   B          fly in to the selected marker (else the one pointed at, else the laser point)
             //   X / Y      previous / next slide
-            //   Left stick click, Menu   bring the display back in front
+            //   Menu (the flat button on the left)   the intro: the whole Earth, display off
+            //   Right stick click   take a photo
+            //   Left stick click   bring the display back in front
             if (_in.aBtn.WasPressedThisFrame() || _in.toggleHud.WasPressedThisFrame()) _hud.Visible = !_hud.Visible;
-            if (_in.next.WasPressedThisFrame()) Next();
-            // Y turns you back to face north (in orbit the globe is already north-up).
-            if (_in.yBtn.WasPressedThisFrame() || _in.north.WasPressedThisFrame()) { if (_travel != null && _travel.fade) _comfort.FadeTo(0f); _northing = true; _travel = null; }
+            if (_in.yBtn.WasPressedThisFrame() || _in.next.WasPressedThisFrame()) Next();
             if (_in.xBtn.WasPressedThisFrame() || _in.prev.WasPressedThisFrame()) Prev();
-            if (_in.leftClick.WasPressedThisFrame() || _in.menu.WasPressedThisFrame()) { _hud.Recenter(); _hud.Visible = true; }
+            if (_in.menu.WasPressedThisFrame()) Intro(false);
+            if (_in.north.WasPressedThisFrame()) { if (_travel != null && _travel.fade) _comfort.FadeTo(0f); _northing = true; _travel = null; }
+            if (_in.photo.WasPressedThisFrame()) TakePhoto();
+            if (_in.leftClick.WasPressedThisFrame()) { _hud.Recenter(); _hud.Visible = true; }
             if (_in.blank.WasPressedThisFrame()) _comfort.FadeTo(_comfort.FadeAlpha > 0.5f ? 0f : 1f);
             if (_in.spectator.WasPressedThisFrame()) _spectator.Toggle();
 
@@ -460,10 +484,14 @@ namespace AtlasVR
             l.y -= _in.kbClimb.ReadValue<float>();
             l.x += _in.kbYaw.ReadValue<float>();
             r = Vector2.ClampMagnitude(r, 1f); l.x = Mathf.Clamp(l.x, -1f, 1f); l.y = Mathf.Clamp(l.y, -1f, 1f);
-            // In orbit the globe stays north-up and still: no sliding or turning, only zoom (and B to fly in).
+            // In orbit the globe stays north-up: no sliding or turning; left and right on the left
+            // stick spin it on its axis instead (about 15 seconds a turn), zoom still works.
             float free = 1f - _rig.OrbitBlend;
+            float spinIn = l.x * _rig.OrbitBlend;
             r *= free; l.x *= free;
-            bool userMoving = r.sqrMagnitude > 0.0001f || Mathf.Abs(l.x) > 0.01f || Mathf.Abs(l.y) > 0.01f;
+            _spinVel = Mathf.Lerp(_spinVel, spinIn, 1f - Mathf.Exp(-dt * 4f));
+            if (Mathf.Abs(_spinVel) > 1e-3f && _travel == null) _rig.Spin(-_spinVel * 24f * dt);   // right turns the globe to the right
+            bool userMoving = r.sqrMagnitude > 0.0001f || Mathf.Abs(l.x) > 0.01f || Mathf.Abs(l.y) > 0.01f || Mathf.Abs(spinIn) > 0.01f;
             if (Mathf.Abs(l.x) > 0.05f) _northing = false;   // turning by hand takes over
             if (userMoving) { if (_travel != null && _travel.fade) _comfort.FadeTo(0f); _travel = null; _rig.StopSpin(); }
 
@@ -582,6 +610,7 @@ namespace AtlasVR
                 {
                     _hover = h;
                     _hud.ShowInfo(_hover, _selected);
+                    _hud.SetPointing(PointLine(_hover ?? _selected));
                 }
             }
 
@@ -593,6 +622,7 @@ namespace AtlasVR
                 else _hud.ResetSources();
                 _hud.CloseMenus();
                 _hud.ShowInfo(_hover, _selected);
+                _hud.SetPointing(PointLine(_hover ?? _selected));
             }
             if (_in.bBtn.WasPressedThisFrame() || _in.teleport.WasPressedThisFrame())
             {
@@ -622,41 +652,91 @@ namespace AtlasVR
         void LateUpdate()
         {
             if (_rig == null) return;
+            // The layers draw every frame (their draws last one frame), paused or not.
             if (_compute != null) _compute.Draw(_rig, _eye);
             if (_cables != null) _cables.Draw(_rig);
             _borders.Draw(_rig);
             _flows.Draw(_rig);
             if (_sites != null) _sites.Draw(_rig, _eye);
+            if (Paused) return;   // the Quest menu is open: hold everything else still
             _proximity.Update(_rig, _eye, _compute, _cables, _sites);
             _hud.Follow(_eye);
             _credits.Tick();
             _branding.Update();
-            _compass.Update(_rig, _eye, _hud.root, _moving);
+            bool below = _rig.mode == ViewMode.Flight && _rig.ViewHeight < GlobeRig.OrbitFrom;
+            _compass.Update(_rig, _eye, _hud.root, below && _hud.Visible);
+            _orbitTitle.Update(_rig, _eye);
+            _guide.visible = !_hud.Visible && _rig.OrbitBlend > 0.5f;   // from orbit, with the display off
+            _guide.Update();
+            _focus.Update(_rig, _eye, _hover, _selected);
             if (Time.unscaledTime >= _placeNext) { _placeNext = Time.unscaledTime + 0.5f; UpdatePlace(); }
             _hud.SetLoading(_rig.Loading ? _rig.LoadPercent : -1f);
             if (_rig.ImageryProblem != null && _rig.ImageryProblem != _noticeShown) { _noticeShown = _rig.ImageryProblem; _hud.SetNotice(_noticeShown, 20f); }
             _spectator.Tick(_cam);
-            if (Time.unscaledTime >= _statusNext) { _statusNext = Time.unscaledTime + 0.25f; _hud.SetStatus(Status()); }
+            if (_photoWanted) ShootPhoto();
         }
 
         float _statusNext;
         string _noticeShown;
 
-        /// The place under you and your coordinates, upper right, while you are below orbit.
+        /// The location line in the bottom box: region, country, coordinates, heading, altitude.
         void UpdatePlace()
         {
-            if (_rig.mode != ViewMode.Flight || _rig.ViewHeight > GlobeRig.OrbitFrom) { _hud.SetLocation(null, null); return; }
+            string alt = "Altitude " + Status();
+            if (_rig.mode != ViewMode.Flight || _rig.ViewHeight > GlobeRig.OrbitFrom) { _hud.SetLocation(alt); return; }
             string place;
-            if (!_regions.HasData) place = "";
+            if (!_regions.HasData) place = null;
             else if (!_regions.Lookup(_rig.Lon, _rig.Lat, out place)) place = "Open water";
-            string coords = Math.Abs(_rig.Lat).ToString("0.000") + "° " + (_rig.Lat >= 0 ? "N" : "S") + "   " + Math.Abs(_rig.Lon).ToString("0.000") + "° " + (_rig.Lon >= 0 ? "E" : "W");
-            _hud.SetLocation(place, coords);
+            string coords = Math.Abs(_rig.Lat).ToString("0.000") + "° " + (_rig.Lat >= 0 ? "N" : "S") + "  " + Math.Abs(_rig.Lon).ToString("0.000") + "° " + (_rig.Lon >= 0 ? "E" : "W");
+            string line = (place != null ? place + "   ·   " : "") + coords + "   ·   Heading " + _compass.HeadingText + "   ·   " + alt;
+            _hud.SetLocation(line);
+        }
+
+        /// "Nuclear power plant, Susquehanna, Pennsylvania, United States".
+        string PointLine(PickInfo p)
+        {
+            if (p == null) return null;
+            string kind = p.subtitle;
+            foreach (var r in p.rows) if (r.Key == "Fuel") kind = r.Value + " power plant";
+            string place = null;
+            if ((p.lon != 0 || p.lat != 0) && _regions.HasData) _regions.Lookup(p.lon, p.lat, out place);
+            var sb = new System.Text.StringBuilder();
+            if (!string.IsNullOrEmpty(kind)) sb.Append(kind);
+            if (!string.IsNullOrEmpty(p.title)) { if (sb.Length > 0) sb.Append(", "); sb.Append(p.title); }
+            if (!string.IsNullOrEmpty(place)) { if (sb.Length > 0) sb.Append(", "); sb.Append(place); }
+            return sb.ToString();
+        }
+
+        /// The intro (the Menu button, and the start): out to the whole Earth, centered in front of you
+        /// with the equator level with your eyes, the display off; the title floats over the pole and
+        /// the controls guide stands beside the Earth. Next from here plays the current slide.
+        bool _atIntro;
+        void Intro(bool instant)
+        {
+            if (_travel != null && _travel.fade) _comfort.FadeTo(0f);
+            double lon = _travel != null ? _travel.lon1 : _rig.Lon;
+            if (instant) { _travel = null; _rig.SetPose(lon, 0, zoomOutHeight, 0); }
+            else StartTravel(lon, 0, zoomOutHeight, 0, false, null);
+            _hud.Visible = false;
+            _atIntro = true;
+            Haptics.Pulse(false, 0.3f, 0.05f);
+        }
+
+        bool _photoWanted;
+        void TakePhoto() { _photoWanted = true; }   // taken at the end of LateUpdate, after this frame's layers are queued
+
+        void ShootPhoto()
+        {
+            _photoWanted = false;
+            string path = _photo.Capture(_cam);
+            Haptics.Pulse(true, 0.6f, 0.05f);
+            _hud.SetNotice(path != null ? "Photo saved" : "Photo failed", 2f);
         }
         string Status()
         {
             double h = _rig.ViewHeight;
             string alt = h >= 1e5 ? (h / 1000).ToString("N0") + " km" : h >= 1e4 ? (h / 1000).ToString("0.0") + " km" : h.ToString("N0") + " m";
-            return "Altitude  " + alt;
+            return alt;
         }
 
         void ShowError(string message)

@@ -26,24 +26,25 @@ namespace AtlasVR
             _root = new GameObject("Compass").transform;
             _root.SetParent(hudRoot, false);
             // Lower right, about 1.1 m out, lying flat and tipped toward you so it reads.
-            Quaternion q = Quaternion.Euler(33f, 26f, 0);
+            Quaternion q = Quaternion.Euler(41f, 40f, 0);   // clear of the bottom bars and the selection panel
             _root.localPosition = q * Vector3.forward * 1.1f;
             _root.localRotation = Quaternion.AngleAxis(-38f, Vector3.right);  // face tipped toward the viewer; needle forward
 
             // Body: a dark puck with a light rim.
-            Part("Rim", _root, cyl, sh, new Color(0.62f, 0.68f, 0.76f), 0.85f, new Vector3(0.124f, 0.012f, 0.124f), Vector3.down * 0.012f);
-            Part("Face", _root, cyl, sh, new Color(0.05f, 0.08f, 0.13f), 0.3f, new Vector3(0.112f, 0.0125f, 0.112f), Vector3.down * 0.0115f);
+            // Body: a glass puck with a glowing rim, translucent so the ground shows through.
+            Glass("Rim", _root, cyl, new Color(0.1f, 0.2f, 0.3f, 0.18f), new Color(0.45f, 0.85f, 1f, 1f), 1.6f, new Vector3(0.128f, 0.014f, 0.128f), Vector3.down * 0.013f);
+            Glass("Face", _root, cyl, new Color(0.02f, 0.05f, 0.09f, 0.55f), new Color(0.3f, 0.6f, 0.9f, 0.5f), 3f, new Vector3(0.114f, 0.0125f, 0.114f), Vector3.down * 0.0112f);
 
             // Dial: ticks and the cardinal letters, turning together.
             _dial = new GameObject("Dial").transform;
             _dial.SetParent(_root, false);
-            _dial.localPosition = Vector3.up * 0.0012f;
+            _dial.localPosition = Vector3.up * 0.0016f;
             var tick = Meshes.Cylinder(6);
             for (int i = 0; i < 24; i++)
             {
                 float a = i * 15f;
                 bool major = i % 6 == 0;
-                var t = Part("Tick " + i, _dial, tick, sh, major ? Color.white : new Color(0.55f, 0.62f, 0.72f), 0.3f,
+                var t = Part("Tick " + i, _dial, tick, sh, major ? new Color(0.75f, 0.95f, 1f) : new Color(0.35f, 0.6f, 0.8f), 0.1f,
                     new Vector3(0.0018f, 0.0012f, major ? 0.009f : 0.005f), Vector3.zero);
                 t.localRotation = Quaternion.Euler(0, a, 0);
                 t.localPosition = t.localRotation * Vector3.forward * (major ? 0.044f : 0.047f);
@@ -83,8 +84,24 @@ namespace AtlasVR
             hg.transform.localRotation = Quaternion.Euler(90f, 0, 0);
             hg.transform.localScale = Vector3.one * 0.0075f;
 
+            // Draw after the HUD canvases (sorting order 10), which would otherwise paint over the glass and text.
+            foreach (var r in _root.GetComponentsInChildren<Renderer>(true)) r.sortingOrder = 11;
             _root.localScale = Vector3.zero;
             _root.gameObject.SetActive(false);
+        }
+
+        static Transform Glass(string name, Transform parent, Mesh mesh, Color body, Color rim, float power, Vector3 scale, Vector3 pos)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localScale = scale;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var m = new Material(Shader.Find("AtlasVR/Glass"));
+            m.SetColor("_Color", body); m.SetColor("_RimColor", rim); m.SetFloat("_RimPower", power);
+            m.renderQueue = 2995;   // before the letters (3000), which write no depth
+            go.AddComponent<MeshRenderer>().sharedMaterial = m;
+            return go.transform;
         }
 
         static Transform Part(string name, Transform parent, Mesh mesh, Shader sh, Color c, float metal, Vector3 scale, Vector3 pos)

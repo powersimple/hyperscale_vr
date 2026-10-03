@@ -1,6 +1,6 @@
 // The heads-up display. Panels sit around the edges of the view and the center stays clear.
 //   Look up        the deck line, the slide's title and subtitle
-//   Top of view    story navigation: the stories menu, where you are, altitude (small)
+//   Top of view    story navigation: a small button per story, where you are, altitude
 //   Left           the story text with its Explore links; the stat boxes beneath it
 //   Upper right    filters: a checkbox list with full labels; sub-filters expand in place
 //   Lower right    data on the selected marker (hidden when nothing is selected)
@@ -35,10 +35,11 @@ namespace AtlasVR
         public Canvas creditsCanvas;
         readonly TextMeshProUGUI _deckLine, _title, _subtitle, _chapter, _body, _infoText, _sourcesText, _status, _storyLine, _progressLabel, _loadingText;
         readonly ScrollRect _bodyScroll, _sourcesScroll;
-        readonly RectTransform _statRow, _explore, _stories, _filterList;
+        readonly RectTransform _statRow, _explore, _filterList;
         readonly Image _image, _progressFill, _loadingFill;
         readonly Slider _slider;
         readonly Dictionary<string, Image> _checks = new Dictionary<string, Image>();
+        readonly Dictionary<string, Button> _trackBtns = new Dictionary<string, Button>();
         readonly Dictionary<string, GameObject> _subRows = new Dictionary<string, GameObject>();   // sub-filter row -> parent key
         readonly Dictionary<string, string> _parentOf = new Dictionary<string, string>();
         readonly Dictionary<string, TextMeshProUGUI> _arrows = new Dictionary<string, TextMeshProUGUI>();
@@ -64,49 +65,39 @@ namespace AtlasVR
             root = new GameObject("Heads-up display").transform;
 
             // Look up: the deck, the slide's title and subtitle.
-            _titleBand = Panel("Title", new Vector2(1200, 196), 0f, 37f);
+            _titleBand = Panel("Title", new Vector2(960, 196), 0f, 31.5f);
             _deckLine = UI.Label("Deck", _titleBand.transform, "", 16, UI.Muted, FontStyles.UpperCase | FontStyles.Bold, TextAlignmentOptions.Top);
-            UI.Place(_deckLine.rectTransform, 30, 14, 1140, 24);
+            UI.Place(_deckLine.rectTransform, 30, 14, 900, 24);
             if (pkg.deck != null) _deckLine.text = Esc(pkg.deck.title) + (string.IsNullOrEmpty(pkg.deck.byline) ? "" : "   ·   " + Esc(pkg.deck.byline));
             _title = UI.Label("Title", _titleBand.transform, "", 44, UI.Text, FontStyles.Bold, TextAlignmentOptions.Top);
-            UI.Place(_title.rectTransform, 30, 42, 1140, 62);
+            UI.Place(_title.rectTransform, 30, 42, 900, 62);
             _title.enableAutoSizing = true; _title.fontSizeMin = 28; _title.fontSizeMax = 44;
             _subtitle = UI.Label("Subtitle", _titleBand.transform, "", 23, UI.Muted, FontStyles.Normal, TextAlignmentOptions.Top);
-            UI.Place(_subtitle.rectTransform, 40, 112, 1120, 72);
+            UI.Place(_subtitle.rectTransform, 40, 112, 880, 72);
             _subtitle.enableAutoSizing = true; _subtitle.fontSizeMin = 17; _subtitle.fontSizeMax = 23;
 
-            // Top of the view: story navigation, small.
-            _nav = Panel("Story navigation", new Vector2(920, 54), 0f, 21.5f);
-            var storiesBtn = UI.Btn("Stories", _nav.transform, "Stories  ▼", 15, () => ToggleMenu(_stories.gameObject));
-            UI.Place((RectTransform)storiesBtn.transform, 10, 9, 130, 36);
-            _storyLine = UI.Label("Story", _nav.transform, "", 15, UI.Text, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
-            UI.Place(_storyLine.rectTransform, 154, 9, 470, 36);
-            _storyLine.textWrappingMode = TextWrappingModes.NoWrap; _storyLine.overflowMode = TextOverflowModes.Ellipsis;
-            _progressLabel = UI.Label("Count", _nav.transform, "", 15, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
-            UI.Place(_progressLabel.rectTransform, 628, 9, 90, 36);
-            _status = UI.Label("Status", _nav.transform, "", 14, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
-            UI.Place(_status.rectTransform, 726, 9, 184, 36);
-
-            _stories = UI.Rect("Stories list", _nav.transform);
-            _stories.anchorMin = _stories.anchorMax = new Vector2(0, 0); _stories.pivot = new Vector2(0, 1);
-            _stories.anchoredPosition = new Vector2(10, -6);
-            int tracks = pkg.deck != null && pkg.deck.tracks != null ? pkg.deck.tracks.Length : 0;
-            _stories.sizeDelta = new Vector2(560, Mathf.CeilToInt(tracks / 3f) * 44 + 16);
-            _stories.gameObject.AddComponent<Image>().color = new Color(0.04f, 0.065f, 0.1f, 0.98f);
-            var g = _stories.gameObject.AddComponent<GridLayoutGroup>();
-            g.cellSize = new Vector2(176, 38); g.spacing = new Vector2(6, 6); g.padding = new RectOffset(8, 8, 8, 8);
-            if (tracks > 0)
+            // Top of the view: story navigation, small and open: every story is a button.
+            _nav = Panel("Story navigation", new Vector2(1040, 78), 0f, 18.3f);
+            var row = UI.Rect("Stories", _nav.transform); UI.Place(row, 14, 9, 1012, 30);
+            var hr = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hr.spacing = 6; hr.childControlWidth = true; hr.childControlHeight = true; hr.childForceExpandWidth = true; hr.childForceExpandHeight = true;
+            if (pkg.deck != null && pkg.deck.tracks != null)
                 foreach (var t in pkg.deck.tracks)
                 {
                     string id = t.id;
-                    UI.Btn("Track " + id, _stories, t.id == "main" ? "Main story" : t.title, 14, () => { _stories.gameObject.SetActive(false); if (OpenTrack != null) OpenTrack(id); });
+                    var tb = UI.Btn("Track " + id, row, t.id == "main" ? "Main story" : t.title, 13, () => { if (OpenTrack != null) OpenTrack(id); }, StoryOff);
+                    _trackBtns[id] = tb;
                 }
-            Overlay(_stories.gameObject);
-            _stories.gameObject.SetActive(false);
-            _menus.Add(_stories.gameObject);
+            _storyLine = UI.Label("Story", _nav.transform, "", 13, UI.Text, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            UI.Place(_storyLine.rectTransform, 20, 46, 560, 24);
+            _storyLine.textWrappingMode = TextWrappingModes.NoWrap; _storyLine.overflowMode = TextOverflowModes.Ellipsis;
+            _progressLabel = UI.Label("Count", _nav.transform, "", 13, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            UI.Place(_progressLabel.rectTransform, 588, 46, 150, 24);
+            _status = UI.Label("Status", _nav.transform, "", 13, UI.Muted, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+            UI.Place(_status.rectTransform, 746, 46, 274, 24);
 
             // Left: the story, then the stats beneath it.
-            _left = Panel("Story", new Vector2(540, 560), -46f, 5f);
+            _left = Panel("Story", new Vector2(540, 560), -46f, 1f);
             _chapter = UI.Label("Chapter", _left.transform, "", 16, UI.Muted, FontStyles.UpperCase | FontStyles.Bold); UI.Place(_chapter.rectTransform, 24, 18, 380, 44);
             _image = UI.Box("Image", _left.transform, Color.white); UI.Place(_image.rectTransform, 416, 16, 100, 100);
             _image.preserveAspect = true; _image.gameObject.SetActive(false);
@@ -118,13 +109,13 @@ namespace AtlasVR
             var he = _explore.gameObject.AddComponent<HorizontalLayoutGroup>();
             he.spacing = 8; he.childControlWidth = true; he.childControlHeight = true; he.childForceExpandWidth = false;
 
-            _stats = Panel("Stats", new Vector2(540, 150), -46f, -18f);
+            _stats = Panel("Stats", new Vector2(540, 150), -46f, -21.5f);
             _statRow = UI.Rect("Boxes", _stats.transform); UI.Stretch(_statRow, 14, 14, 14, 14);
             var hs = _statRow.gameObject.AddComponent<HorizontalLayoutGroup>();
             hs.spacing = 10; hs.childControlWidth = true; hs.childControlHeight = true; hs.childForceExpandWidth = true; hs.childForceExpandHeight = true;
 
             // Upper right: the filters, a checkbox list.
-            _filtersPanel = Panel("Filters", new Vector2(FilterW, 200), 40f, 26f, true);
+            _filtersPanel = Panel("Filters", new Vector2(FilterW, 200), 40f, 22f, true);
             _filterList = UI.Rect("List", _filtersPanel.transform); UI.Stretch(_filterList, 12, 12, 12, 12);
             var vl = _filterList.gameObject.AddComponent<VerticalLayoutGroup>();
             vl.spacing = 2; vl.childControlWidth = true; vl.childControlHeight = true; vl.childForceExpandHeight = false; vl.childForceExpandWidth = true;
@@ -134,22 +125,23 @@ namespace AtlasVR
             AddFilter(new FilterItem("panels", "Panels") { children = filters.panels }, false);
 
             // Lower right: the selection's data.
-            _info = Panel("Selection", new Vector2(390, 330), 46f, -25f);
+            _info = Panel("Selection", new Vector2(390, 330), 46f, -27f);
             var infoContent = UI.Scroll("Scroll", _info.transform, out ScrollRect infoScroll); UI.Stretch((RectTransform)infoScroll.transform, 18, 18, 16, 16);
             _infoText = UI.Label("Text", infoContent, "", 18, UI.Text); _infoText.gameObject.AddComponent<LayoutElement>();
 
             // Bottom of the view: Back, progress, Next.
-            _bottom = Panel("Navigation", new Vector2(1000, 84), 0f, -25f);
+            // The three bottom bars stack close: navigation, sources, credits.
+            _bottom = Panel("Navigation", new Vector2(1000, 84), 0f, -30f);
             var back = UI.Btn("Back", _bottom.transform, "◄  Back", 21, () => { if (Back != null) Back(); }); UI.Place((RectTransform)back.transform, 12, 12, 150, 60);
             var next = UI.Btn("Next", _bottom.transform, "Next  ►", 21, () => { if (Next != null) Next(); }, new Color(0.15f, 0.3f, 0.42f, 1f)); UI.Place((RectTransform)next.transform, 838, 12, 150, 60);
-            var track = UI.Box("Progress", _bottom.transform, new Color(0.12f, 0.18f, 0.26f, 1f)); UI.Place(track.rectTransform, 182, 18, 636, 8);
-            _progressFill = UI.Box("Fill", track.transform, UI.Accent);
+            var track = UI.Box("Progress", _bottom.transform, new Color(0.3f, 0.45f, 0.6f, 0.3f)); UI.Place(track.rectTransform, 182, 18, 636, 6); UI.Round(track, 3f);
+            _progressFill = UI.Box("Fill", track.transform, UI.Accent); UI.Round(_progressFill, 3f);
             _progressFill.rectTransform.anchorMin = Vector2.zero; _progressFill.rectTransform.anchorMax = new Vector2(0, 1);
             _progressFill.rectTransform.offsetMin = Vector2.zero; _progressFill.rectTransform.offsetMax = Vector2.zero;
             _slider = UI.Slider("Slider", _bottom.transform, 1, val => { if (!_suppress && Scrub != null) Scrub((int)val); }); UI.Place((RectTransform)_slider.transform, 182, 34, 636, 34);
 
             // Look down: the sources (plain text, no links), then the credits.
-            _sources = Panel("Sources", new Vector2(1000, 96), 0f, -35.5f);
+            _sources = Panel("Sources", new Vector2(1000, 96), 0f, -35.6f);
             var srcContent = UI.Scroll("Scroll", _sources.transform, out _sourcesScroll); UI.Stretch((RectTransform)_sourcesScroll.transform, 18, 18, 10, 10);
             _sourcesText = UI.Label("Text", srcContent, "", 14, UI.Muted); _sourcesText.gameObject.AddComponent<LayoutElement>();
 
@@ -161,15 +153,15 @@ namespace AtlasVR
             _locationText = UI.Label("Text", _location.transform, "", 17, UI.Text, FontStyles.Bold, TextAlignmentOptions.BottomRight);
             UI.Stretch(_locationText.rectTransform, 0, 4, 0, 0);
             _locationText.textWrappingMode = TextWrappingModes.NoWrap; _locationText.overflowMode = TextOverflowModes.Overflow;
-            Place(_location.transform, 40f, 27f);
+            Place(_location.transform, 40f, 23f);
             _location.gameObject.SetActive(false);
 
             // While the Earth loads.
             _loading = Panel("Loading", new Vector2(520, 70), 0f, 8f);
             _loadingText = UI.Label("Text", _loading.transform, "Loading the Earth", 20, UI.Text, FontStyles.Bold, TextAlignmentOptions.Center);
             UI.Place(_loadingText.rectTransform, 20, 10, 480, 32);
-            var lt = UI.Box("Bar", _loading.transform, new Color(0.12f, 0.18f, 0.26f, 1f)); UI.Place(lt.rectTransform, 40, 48, 440, 8);
-            _loadingFill = UI.Box("Fill", lt.transform, new Color(0.35f, 0.75f, 0.85f, 1f));
+            var lt = UI.Box("Bar", _loading.transform, new Color(0.3f, 0.45f, 0.6f, 0.3f)); UI.Place(lt.rectTransform, 40, 48, 440, 6); UI.Round(lt, 3f);
+            _loadingFill = UI.Box("Fill", lt.transform, new Color(0.4f, 0.8f, 0.95f, 0.95f)); UI.Round(_loadingFill, 3f);
             _loadingFill.rectTransform.anchorMin = Vector2.zero; _loadingFill.rectTransform.anchorMax = new Vector2(0, 1);
             _loadingFill.rectTransform.offsetMin = Vector2.zero; _loadingFill.rectTransform.offsetMax = Vector2.zero;
             _loading.gameObject.SetActive(false);
@@ -182,10 +174,12 @@ namespace AtlasVR
         {
             var c = UI.WorldCanvas(name, root, size, _cam);
             if (topPivot) ((RectTransform)c.transform).pivot = new Vector2(0.5f, 1f);
-            var bg = UI.Box("Background", c.transform, UI.Panel); UI.Stretch(bg.rectTransform);
-            var edge = UI.Box("Accent", c.transform, UI.Accent);
+            var bg = UI.Box("Background", c.transform, UI.Panel); UI.Stretch(bg.rectTransform); UI.Round(bg, 22f);
+            // A thin glowing line along the top, inset from the rounded corners.
+            var edge = UI.Box("Accent", c.transform, new Color(UI.Accent.r, UI.Accent.g, UI.Accent.b, 0.85f));
             edge.rectTransform.anchorMin = new Vector2(0, 1); edge.rectTransform.anchorMax = new Vector2(1, 1);
-            edge.rectTransform.pivot = new Vector2(0.5f, 1); edge.rectTransform.sizeDelta = new Vector2(0, 3); edge.rectTransform.anchoredPosition = Vector2.zero;
+            edge.rectTransform.pivot = new Vector2(0.5f, 1); edge.rectTransform.sizeDelta = new Vector2(-56, 2); edge.rectTransform.anchoredPosition = new Vector2(0, -2);
+            UI.Round(edge, 1f);
             UI.Slab(c);
             Place(c.transform, yaw, pitch);
             return c;
@@ -196,7 +190,7 @@ namespace AtlasVR
             creditsCanvas = credits;
             credits.transform.SetParent(root, false);
             UI.Slab(credits);
-            Place(credits.transform, 0f, -44f);
+            Place(credits.transform, 0f, -40.8f);
         }
 
         static void Place(Transform t, float yaw, float pitch)
@@ -227,6 +221,7 @@ namespace AtlasVR
             // The whole row is the hit target: checking a box, or for a heading without one, expanding.
             var hit = row.gameObject.AddComponent<Image>();
             hit.color = indent > 0 ? new Color(1, 1, 1, 0.02f) : new Color(1, 1, 1, 0.045f);
+            UI.Round(hit, 8f);
             var b = row.gameObject.AddComponent<Button>();
             var colors = b.colors; colors.highlightedColor = new Color(2.6f, 2.6f, 2.6f, 1f); colors.colorMultiplier = 2.6f; b.colors = colors;
             b.targetGraphic = hit;
@@ -238,9 +233,11 @@ namespace AtlasVR
                 box.rectTransform.anchorMin = box.rectTransform.anchorMax = new Vector2(0, 0.5f);
                 box.rectTransform.pivot = new Vector2(0, 0.5f);
                 box.rectTransform.sizeDelta = new Vector2(20, 20); box.rectTransform.anchoredPosition = new Vector2(x, 0);
-                var ol = box.gameObject.AddComponent<Outline>(); ol.effectColor = new Color(0.55f, 0.65f, 0.78f, 0.9f); ol.effectDistance = new Vector2(1.5f, -1.5f);
+                UI.Round(box, 5f);
+                var ol = box.gameObject.AddComponent<Outline>(); ol.effectColor = new Color(0.55f, 0.75f, 0.95f, 0.7f); ol.effectDistance = new Vector2(1f, -1f);
                 var tick = UI.Box("Tick", box.transform, Color.white);
                 tick.raycastTarget = false;
+                UI.Round(tick, 3f);
                 UI.Stretch(tick.rectTransform, 5, 5, 5, 5);
                 _checks[key] = box;
                 x += 32;
@@ -434,6 +431,17 @@ namespace AtlasVR
             _progressLabel.text = (index + 1) + " of " + count;
             float f = count <= 1 ? 1f : (float)index / (count - 1);
             _progressFill.rectTransform.anchorMax = new Vector2(f, 1);
+        }
+
+        static readonly Color StoryOff = new Color(0.14f, 0.24f, 0.36f, 0.55f), StoryOn = new Color(0.94f, 0.24f, 0.62f, 0.85f);
+        string _trackShown;
+
+        /// Lights the current story's button.
+        public void SetTrack(string id)
+        {
+            if (id == _trackShown) return;
+            _trackShown = id;
+            foreach (var kv in _trackBtns) kv.Value.targetGraphic.color = kv.Key == id ? StoryOn : StoryOff;
         }
 
         public void SetStatus(string s) { if (_status.text != s) _status.text = s; }

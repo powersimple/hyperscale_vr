@@ -14,9 +14,9 @@ namespace AtlasVR
 {
     public static class UI
     {
-        public static readonly Color Panel = new Color(0.035f, 0.06f, 0.1f, 0.94f);
+        public static readonly Color Panel = new Color(0.025f, 0.05f, 0.085f, 0.6f);   // glass: the Earth shows through
         public static readonly Color PanelEdge = new Color(0.2f, 0.32f, 0.45f, 1f);
-        public static readonly Color ButtonBg = new Color(0.1f, 0.17f, 0.26f, 1f);
+        public static readonly Color ButtonBg = new Color(0.14f, 0.24f, 0.36f, 0.72f);
         public static readonly Color ButtonHover = new Color(0.16f, 0.27f, 0.4f, 1f);
         public static readonly Color Accent = new Color(0.94f, 0.24f, 0.62f, 1f);
         public static readonly Color Text = new Color(0.94f, 0.96f, 0.98f, 1f);
@@ -112,6 +112,7 @@ namespace AtlasVR
             colors.colorMultiplier = 1.4f;
             b.colors = colors;
             b.targetGraphic = img;
+            Round(img, 10f);
             Raise(img.gameObject);
             if (onClick != null) b.onClick.AddListener(onClick);
             var t = Label("Text", img.transform, text, size, Text, FontStyles.Bold, TextAlignmentOptions.Center);
@@ -121,18 +122,48 @@ namespace AtlasVR
             return b;
         }
 
-        /// A drop shadow and a light top edge, so a control reads as raised off its panel.
-        public static void Raise(GameObject go, float depth = 4f)
+        /// A soft shadow and a hairline light edge: a control floating a little off its glass panel.
+        public static void Raise(GameObject go, float depth = 3f)
         {
             var sh = go.AddComponent<Shadow>();
-            sh.effectColor = new Color(0f, 0f, 0f, 0.6f);
-            sh.effectDistance = new Vector2(depth * 0.6f, -depth);
-            var rt = (RectTransform)go.transform;
-            var hi = Box("Highlight", rt, new Color(1f, 1f, 1f, 0.16f));
-            hi.raycastTarget = false;
-            hi.rectTransform.anchorMin = new Vector2(0, 1); hi.rectTransform.anchorMax = new Vector2(1, 1);
-            hi.rectTransform.pivot = new Vector2(0.5f, 1); hi.rectTransform.sizeDelta = new Vector2(-4, 2); hi.rectTransform.anchoredPosition = new Vector2(0, -1);
-            var le = hi.gameObject.AddComponent<LayoutElement>(); le.ignoreLayout = true;
+            sh.effectColor = new Color(0f, 0.02f, 0.05f, 0.35f);
+            sh.effectDistance = new Vector2(0f, -depth);
+            var ol = go.AddComponent<Outline>();
+            ol.effectColor = new Color(0.6f, 0.85f, 1f, 0.22f);
+            ol.effectDistance = new Vector2(1f, -1f);
+        }
+
+        static Sprite _rounded, _circle;
+
+        /// A rounded-corner, nine-sliced sprite drawn once at startup, so panels and buttons get soft
+        /// corners without texture assets. radius is in canvas units.
+        public static void Round(Image img, float radius)
+        {
+            if (_rounded == null) _rounded = MakeRound(64, 24, true);
+            img.sprite = _rounded;
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = 24f / Mathf.Max(1f, radius);
+        }
+
+        public static Sprite Circle { get { if (_circle == null) _circle = MakeRound(64, 32, false); return _circle; } }
+
+        static Sprite MakeRound(int size, int radius, bool sliced)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var px = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    // Distance to the rounded rectangle's edge, for a one-pixel antialiased rim.
+                    float cx = Mathf.Clamp(x + 0.5f, radius, size - radius), cy = Mathf.Clamp(y + 0.5f, radius, size - radius);
+                    float d = Mathf.Sqrt((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy));
+                    float a = Mathf.Clamp01(radius - d + 0.5f);
+                    px[y * size + x] = new Color32(255, 255, 255, (byte)(a * 255));
+                }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            var border = sliced ? new Vector4(radius, radius, radius, radius) : Vector4.zero;
+            return Sprite.Create(tex, new UnityEngine.Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
         }
 
         static Material _overlayText;
@@ -152,14 +183,17 @@ namespace AtlasVR
 
         static Material _slabMat;
 
-        /// A beveled solid backing behind a world canvas, so the panel reads as an object in space.
-        /// Call again after the canvas changes size.
-        public static void Slab(Canvas c, float depth = 22f, float bevel = 9f)
+        /// A rounded glass block behind a world canvas: a faint body with a bright rim, so the panel
+        /// reads as an object in space while the Earth shows through. Call again after a resize.
+        public static void Slab(Canvas c, float depth = 16f, float radius = 22f)
         {
             if (_slabMat == null)
             {
-                _slabMat = new Material(Shader.Find("AtlasVR/Solid"));
-                _slabMat.SetColor("_Color", new Color(0.075f, 0.11f, 0.17f, 1f));
+                _slabMat = new Material(Shader.Find("AtlasVR/Glass"));
+                _slabMat.SetColor("_Color", new Color(0.06f, 0.11f, 0.18f, 0.22f));
+                _slabMat.SetColor("_RimColor", new Color(0.4f, 0.78f, 1f, 0.75f));
+                _slabMat.SetFloat("_RimPower", 2.2f);
+                _slabMat.renderQueue = 2990;   // before the canvases (3000)
             }
             var rt = (RectTransform)c.transform;
             var t = rt.Find("Slab");
@@ -175,7 +209,7 @@ namespace AtlasVR
             var r = rt.rect;
             var mf = t.GetComponent<MeshFilter>();
             if (mf.sharedMesh != null) UnityEngine.Object.Destroy(mf.sharedMesh);
-            mf.sharedMesh = Meshes.Slab(r.xMin - 6, r.yMin - 6, r.xMax + 6, r.yMax + 6, 2f, depth, bevel);
+            mf.sharedMesh = Meshes.RoundedSlab(r.xMin - 4, r.yMin - 4, r.xMax + 4, r.yMax + 4, 2f, depth, radius + 4);
         }
 
         public static void SetText(UnityEngine.UI.Button b, string text)
@@ -197,13 +231,15 @@ namespace AtlasVR
         {
             var root = Rect(name, parent);
             var s = root.gameObject.AddComponent<UnityEngine.UI.Slider>();
-            var bg = Box("Track", root, new Color(0.12f, 0.18f, 0.26f, 1f)); Stretch(bg.rectTransform, 0, 0, 14, 14);
-            var fillArea = Rect("Fill Area", root); Stretch(fillArea, 0, 0, 14, 14);
-            var fill = Box("Fill", fillArea, new Color(0.35f, 0.75f, 0.85f, 1f)); Stretch(fill.rectTransform);
-            var handleArea = Rect("Handle Area", root); Stretch(handleArea, 10, 10, 0, 0);
+            var bg = Box("Track", root, new Color(0.3f, 0.45f, 0.6f, 0.35f)); Stretch(bg.rectTransform, 0, 0, 13, 13); Round(bg, 4f);
+            var fillArea = Rect("Fill Area", root); Stretch(fillArea, 0, 0, 13, 13);
+            var fill = Box("Fill", fillArea, new Color(0.4f, 0.8f, 0.95f, 0.9f)); Stretch(fill.rectTransform); Round(fill, 4f);
+            var handleArea = Rect("Handle Area", root); Stretch(handleArea, 13, 13, 0, 0);
             var handle = Box("Handle", handleArea, Color.white);
-            handle.rectTransform.anchorMin = new Vector2(0, 0); handle.rectTransform.anchorMax = new Vector2(0, 1); // the slider drives x only
-            handle.rectTransform.sizeDelta = new Vector2(20, 0);
+            handle.sprite = Circle; handle.preserveAspect = true;   // a round knob
+            handle.rectTransform.anchorMin = new Vector2(0, 0.5f); handle.rectTransform.anchorMax = new Vector2(0, 0.5f); // the slider drives x only
+            handle.rectTransform.sizeDelta = new Vector2(26, 26);
+            var glow = handle.gameObject.AddComponent<Outline>(); glow.effectColor = new Color(0.4f, 0.8f, 1f, 0.5f); glow.effectDistance = new Vector2(2f, -2f);
             s.fillRect = fill.rectTransform;
             s.handleRect = handle.rectTransform;
             s.targetGraphic = handle;

@@ -4,6 +4,7 @@ Shader "AtlasVR/Solid"
     Properties
     {
         _Color ("Color", Color) = (0.05, 0.08, 0.12, 1)
+        [Toggle] _ZWrite ("ZWrite", Float) = 1
     }
     SubShader
     {
@@ -12,6 +13,7 @@ Shader "AtlasVR/Solid"
         {
             Name "AtlasSolid"
             Tags { "LightMode" = "UniversalForward" }
+            ZWrite [_ZWrite]
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -20,6 +22,7 @@ Shader "AtlasVR/Solid"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color;
+                float _ZWrite;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };

@@ -1,6 +1,6 @@
 // Country and state borders, for bearings: thin ribbons of constant angular width drawn with
 // the cable shader. Country lines (and coasts) show at every height; state and province lines
-// fade in as you come down. Data: Natural Earth admin-1 polygons (public domain).
+// fade in as you come down. Data: Natural Earth 1:50m boundary lines (public domain), no coasts.
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -83,21 +83,23 @@ namespace AtlasVR
             double vh = rig.ViewHeight;
             // Fade out low over the ground, where the imagery itself gives the bearings.
             float low = Mathf.InverseLerp(4000f, 25000f, (float)vh);
+            // Out in space the lines only add noise: countries come in below about 9,000 km.
+            float far = Mathf.InverseLerp(1.2e7f, 7.0e6f, (float)vh);
             var bounds = new Bounds(rig.BallCenter, Vector3.one * Mathf.Max(10f, rig.BallRadius * 3f));
-            if (countriesOn && _countries != null && low > 0f)
+            if (countriesOn && _countries != null && low * far > 0f)
             {
-                _cMat.SetFloat("_WidthWS", 0.0011f);
+                _cMat.SetFloat("_WidthWS", 0.0009f);
                 _cMat.SetFloat("_LiftWS", 0.0008f);
-                _cMat.SetColor("_Tint", new Color(1f, 0.96f, 0.82f, 0.6f * low));
+                _cMat.SetColor("_Tint", new Color(1f, 0.96f, 0.86f, 0.5f * low * far));
                 Render(_cMat, _countries, bounds);
             }
-            // States come in below about 4,000 km.
-            float st = Mathf.InverseLerp(4.5e6f, 2.0e6f, (float)vh) * low;
+            // States come in below about 2,500 km.
+            float st = Mathf.InverseLerp(3.0e6f, 1.2e6f, (float)vh) * low;
             if (statesOn && _states != null && st > 0f)
             {
-                _sMat.SetFloat("_WidthWS", 0.0007f);
+                _sMat.SetFloat("_WidthWS", 0.0006f);
                 _sMat.SetFloat("_LiftWS", 0.0008f);
-                _sMat.SetColor("_Tint", new Color(0.85f, 0.9f, 1f, 0.38f * st));
+                _sMat.SetColor("_Tint", new Color(0.85f, 0.9f, 1f, 0.32f * st));
                 Render(_sMat, _states, bounds);
             }
         }

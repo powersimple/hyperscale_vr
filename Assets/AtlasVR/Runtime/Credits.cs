@@ -27,7 +27,7 @@ namespace AtlasVR
         {
             _static = staticCredits;
             canvas = UI.WorldCanvas("Credits", parent, new Vector2(1000, 64), cam);
-            var bg = UI.Box("Background", canvas.transform, new Color(0.02f, 0.035f, 0.06f, 0.9f)); UI.Stretch(bg.rectTransform);
+            var bg = UI.Box("Background", canvas.transform, new Color(0.02f, 0.04f, 0.07f, 0.62f)); UI.Stretch(bg.rectTransform); UI.Round(bg, 22f);
             _logos = UI.Rect("Logos", canvas.transform); UI.Place(_logos, 10, 8, 260, 48);
             var h = _logos.gameObject.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 8; h.childControlWidth = false; h.childControlHeight = false; h.childAlignment = TextAnchor.MiddleLeft;

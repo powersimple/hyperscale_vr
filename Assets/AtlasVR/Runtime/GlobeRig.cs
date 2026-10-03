@@ -99,7 +99,15 @@ namespace AtlasVR
 
         // Tilesets are hidden by camera layer rather than disabled: disabling a Cesium tileset
         // destroys it, and the reload would leave the globe blank for seconds.
-        public const int TerrainLayer = 30, PhotorealLayer = 31;
+        public const int NightLayer = 29, TerrainLayer = 30, PhotorealLayer = 31;
+
+        /// The night Earth is its own terrain tileset with the night imagery, kept loaded beside the day
+        /// one. Switching an overlay on one tileset re-imaged every tile, which showed as white tiles.
+        public Cesium3DTileset NightTerrain { get; private set; }
+        Cesium3DTileset ActiveTerrain { get { return _nightShown ? NightTerrain : Terrain; } }
+        int ActiveTerrainLayer { get { return _nightShown ? NightLayer : TerrainLayer; } }
+        bool _nightShown;
+        float _nightSince = -100f, _nightSwitched = -100f, _loadDone = -100f, _nightFirstRun = -100f;
 
         CesiumIonRasterOverlay _imagery, _night;
         LensExcluder _lens;
@@ -147,10 +155,21 @@ namespace AtlasVR
             if (!string.IsNullOrEmpty(ionToken)) _imagery.ionAccessToken = ionToken;
             _imagery.maximumTextureSize = quest ? 1024 : 2048;
 
-            _night = t.AddComponent<CesiumIonRasterOverlay>();
+            var nt = new GameObject("Cesium World Terrain (night)");
+            nt.transform.SetParent(g.transform, false);
+            NightTerrain = nt.AddComponent<Cesium3DTileset>();
+            NightTerrain.tilesetSource = CesiumDataSource.FromCesiumIon;
+            NightTerrain.ionAssetID = WorldTerrain;
+            if (!string.IsNullOrEmpty(ionToken)) NightTerrain.ionAccessToken = ionToken;
+            Tune(NightTerrain, quest);
+            if (quest) NightTerrain.maximumCachedBytes = 384L * 1024 * 1024;
+            nt.layer = NightLayer;
+            _night = nt.AddComponent<CesiumIonRasterOverlay>();
             _night.ionAssetID = EarthAtNight;
             if (!string.IsNullOrEmpty(ionToken)) _night.ionAccessToken = ionToken;
-            _night.enabled = false;
+            _night.maximumTextureSize = quest ? 1024 : 2048;
+            NightTerrain.suspendUpdate = true;   // warms up after the day Earth has loaded
+            if (_cam != null) _cam.cullingMask &= ~(1 << NightLayer);
 
             var p = new GameObject("Google Photorealistic 3D Tiles");
             p.transform.SetParent(g.transform, false);
@@ -180,6 +199,10 @@ namespace AtlasVR
             _under.AddComponent<MeshFilter>().sharedMesh = Meshes.Sphere(48, 96);
             var um = new Material(Shader.Find("AtlasVR/Solid"));
             um.SetColor("_Color", new Color(0.035f, 0.075f, 0.13f, 1f));
+            // Drawn first and without depth, so the terrain always covers it: it only shows through
+            // where no tile is drawn. (Depth-tested, it fought the terrain from orbit.)
+            um.SetFloat("_ZWrite", 0f);
+            um.renderQueue = 1900;
             _under.AddComponent<MeshRenderer>().sharedMaterial = um;
             Loading = true;
             _loadStart = Time.time;
@@ -194,9 +217,14 @@ namespace AtlasVR
             ts.createPhysicsMeshes = false;          // ground height comes from height sampling instead
             ts.maximumScreenSpaceError = quest ? 24f : 12f;
             ts.maximumSimultaneousTileLoads = quest ? 14u : 24u;
-            ts.maximumCachedBytes = quest ? 512L * 1024 * 1024 : 1024L * 1024 * 1024; // two tilesets stay resident
+            ts.maximumCachedBytes = quest ? 640L * 1024 * 1024 : 1024L * 1024 * 1024; // two tilesets stay resident
             ts.preloadSiblings = !quest;
             ts.forbidHoles = false;
+            // Keep the rest of the globe loaded at a coarse level when it is out of view (behind you, or
+            // past the horizon), so turning your head or zooming back out never shows bare tiles.
+            ts.enforceCulledScreenSpaceError = true;
+            ts.culledScreenSpaceError = 64f;
+            ts.preloadAncestors = true;
         }
 
         /// Stand the table (or the room globe) in front of the viewer.
@@ -355,7 +383,7 @@ namespace AtlasVR
             UpdateUnderlay();
 
             // Day or night imagery; photorealistic tiles for close views.
-            if (_night.enabled != _nightOn) { _night.enabled = _nightOn; _imagery.enabled = !_nightOn; }
+            UpdateNight();
             UpdatePhotoreal();
 
             // One matrix carries ECEF into the world for every layer this frame.
@@ -407,9 +435,9 @@ namespace AtlasVR
                 _photorealOn = want;
                 _photoSince = Time.time;
                 if (want) { Photoreal.suspendUpdate = false; SetLayerVisible(PhotorealLayer, true); }
-                else { Terrain.suspendUpdate = false; SetLayerVisible(TerrainLayer, true); _terrainShown = true; SetLayerVisible(PhotorealLayer, false); }
+                else { ActiveTerrain.suspendUpdate = false; SetLayerVisible(ActiveTerrainLayer, true); _terrainShown = true; SetLayerVisible(PhotorealLayer, false); }
             }
-            if (_photorealOn && _terrainShown)
+            if (_photorealOn && _terrainShown && !Loading)   // during the first load the terrain gate decides
             {
                 float progress = 0f;
                 try { progress = Photoreal.ComputeLoadProgress(); } catch (Exception) { }
@@ -417,13 +445,63 @@ namespace AtlasVR
                 float since = Time.time - _photoSince;
                 if ((since > 0.75f && progress >= 92f) || since > 5f)
                 {
-                    SetLayerVisible(TerrainLayer, false);
-                    Terrain.suspendUpdate = true;
+                    SetLayerVisible(ActiveTerrainLayer, false);
+                    ActiveTerrain.suspendUpdate = true;
                     _terrainShown = false;
                 }
             }
             if (!_photorealOn && Time.time - _photoSince > 1.5f && !Photoreal.suspendUpdate)
                 Photoreal.suspendUpdate = true;
+        }
+
+        /// Day and night: the wanted Earth loads (hidden) until it is mostly ready, then the two swap,
+        /// and the other pauses with its tiles kept. The night Earth also warms up for half a minute
+        /// after the first load, so the first night slide does not wait.
+        void UpdateNight()
+        {
+            if (Loading) return;
+            float now = Time.time;
+            bool warm = now - _loadDone < 30f;
+            var want = _nightOn ? NightTerrain : Terrain;
+            var other = _nightOn ? Terrain : NightTerrain;
+            if (_nightOn != _nightShown && _photorealOn && !_terrainShown)
+            {
+                // Photoreal covers the ground: just change which terrain comes back afterwards
+                // (leaving the exit resumes and reveals it); keep both paused meanwhile.
+                _nightShown = _nightOn;
+                _nightSince = -100f;
+                if (!other.suspendUpdate) other.suspendUpdate = true;
+                return;
+            }
+            if (_nightOn != _nightShown)
+            {
+                if (_nightSince < 0f) _nightSince = now;
+                if (want.suspendUpdate) { want.suspendUpdate = false; if (want == NightTerrain && _nightFirstRun < 0f) _nightFirstRun = now; }
+                float p = 0f;
+                try { p = want.ComputeLoadProgress(); } catch (Exception) { }
+                float since = now - _nightSince;
+                // A tileset that just started reads 100% before it requests anything: give it time.
+                bool fresh = want == NightTerrain && now - _nightFirstRun < 2.5f;
+                if ((since > 0.75f && p >= 90f && !fresh) || since > 6f)
+                {
+                    bool visible = !_photorealOn || _terrainShown;
+                    _nightShown = _nightOn;
+                    if (visible) { SetLayerVisible(ActiveTerrainLayer, true); SetLayerVisible(_nightShown ? TerrainLayer : NightLayer, false); }
+                    _nightSince = -100f;
+                    _nightSwitched = now;
+                }
+            }
+            else
+            {
+                _nightSince = -100f;
+                // The hidden one pauses (tiles kept) a moment after a swap, unless it is warming up.
+                bool keep = (other == NightTerrain && warm) || now - _nightSwitched < 1.5f;
+                if (other.suspendUpdate == keep)
+                {
+                    other.suspendUpdate = !keep;
+                    if (!other.suspendUpdate && other == NightTerrain && _nightFirstRun < 0f) _nightFirstRun = now;
+                }
+            }
         }
 
         void UpdateLoading()
@@ -438,7 +516,8 @@ namespace AtlasVR
             {
                 Loading = false;
                 LoadPercent = 100f;
-                if (!_photorealOn || _terrainShown) SetLayerVisible(TerrainLayer, true);
+                _loadDone = Time.time;
+                if (!_photorealOn || _terrainShown) SetLayerVisible(ActiveTerrainLayer, true);
             }
         }
 
@@ -460,7 +539,7 @@ namespace AtlasVR
         void SetLayerVisible(int layer, bool on)
         {
             if (_cam == null) return;
-            if (layer == TerrainLayer && on && Loading) return;   // revealed when loading finishes
+            if ((layer == TerrainLayer || layer == NightLayer) && on && Loading) return;   // revealed when loading finishes
             if (on) _cam.cullingMask |= 1 << layer; else _cam.cullingMask &= ~(1 << layer);
         }
 
@@ -486,7 +565,7 @@ namespace AtlasVR
             if (_sample == null && Time.time >= _nextSample && Height < 60000)
             {
                 _nextSample = Time.time + 0.35f;
-                var ts = _photorealOn && !_terrainShown ? Photoreal : Terrain;
+                var ts = _photorealOn && !_terrainShown ? Photoreal : ActiveTerrain;
                 if (ts != null && ts.isActiveAndEnabled)
                 {
                     try { _sample = ts.SampleHeightMostDetailed(new double3(Lon, Lat, 0)); _sampleStarted = Time.time; }
@@ -499,7 +578,7 @@ namespace AtlasVR
         /// Starts a ground-height sample at a place (for landing a flight above the terrain there).
         public Task<CesiumSampleHeightResult> SampleAt(double lon, double lat)
         {
-            var ts = _photorealOn && !_terrainShown ? Photoreal : Terrain;
+            var ts = _photorealOn && !_terrainShown ? Photoreal : ActiveTerrain;
             if (ts == null || !ts.isActiveAndEnabled) return null;
             try { return ts.SampleHeightMostDetailed(new double3(lon, lat, 0)); }
             catch (Exception) { return null; }
@@ -618,6 +697,7 @@ namespace AtlasVR
             _shell = new Material(Shader.Find("AtlasVR/Atmosphere"));
             _stars = Stars(2400);
             _starMat = new Material(Shader.Find("AtlasVR/Stars"));
+            _starMat.renderQueue = 1800;   // before the Earth underlay, which writes no depth
         }
 
         public void Draw(GlobeRig rig, Vector3 eye, float strength)

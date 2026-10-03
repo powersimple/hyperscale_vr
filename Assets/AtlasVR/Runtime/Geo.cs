@@ -174,6 +174,59 @@ namespace AtlasVR
             return m;
         }
 
+        /// A rounded-rectangle glass block behind the rect (x0..x1, y0..y1), from z0 back to z0 + depth.
+        /// Corner radius r; the front faces -z (the viewer); side normals point outward for the rim.
+        public static Mesh RoundedSlab(float x0, float y0, float x1, float y1, float z0, float depth, float r, int seg = 8)
+        {
+            r = Mathf.Min(r, Mathf.Min(x1 - x0, y1 - y0) * 0.5f);
+            var ring = new List<Vector2>(); var outN = new List<Vector2>();
+            Vector2[] centers = { new Vector2(x1 - r, y1 - r), new Vector2(x0 + r, y1 - r), new Vector2(x0 + r, y0 + r), new Vector2(x1 - r, y0 + r) };
+            for (int c = 0; c < 4; c++)
+                for (int i = 0; i <= seg; i++)
+                {
+                    float a = (c * 90f + 90f * i / seg) * Mathf.Deg2Rad;
+                    var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                    ring.Add(centers[c] + d * r); outN.Add(d);
+                }
+            int n = ring.Count;
+            var v = new List<Vector3>(); var nm = new List<Vector3>(); var t = new List<int>();
+            float zb = z0 + depth;
+            Vector2 mid = new Vector2((x0 + x1) * 0.5f, (y0 + y1) * 0.5f);
+            // Front (toward -z) and back faces, fans from the middle.
+            int f0 = v.Count; v.Add(new Vector3(mid.x, mid.y, z0)); nm.Add(Vector3.back);
+            for (int i = 0; i < n; i++) { v.Add(new Vector3(ring[i].x, ring[i].y, z0)); nm.Add(Vector3.back); }
+            int b0 = v.Count; v.Add(new Vector3(mid.x, mid.y, zb)); nm.Add(Vector3.forward);
+            for (int i = 0; i < n; i++) { v.Add(new Vector3(ring[i].x, ring[i].y, zb)); nm.Add(Vector3.forward); }
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                // The ring runs counterclockwise seen from -z; clockwise from the viewer means (c, j, i).
+                t.Add(f0); t.Add(f0 + 1 + j); t.Add(f0 + 1 + i);
+                t.Add(b0); t.Add(b0 + 1 + i); t.Add(b0 + 1 + j);
+            }
+            // Sides, smooth normals.
+            int s0 = v.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var no = new Vector3(outN[i].x, outN[i].y, 0);
+                v.Add(new Vector3(ring[i].x, ring[i].y, z0)); nm.Add(no);
+                v.Add(new Vector3(ring[i].x, ring[i].y, zb)); nm.Add(no);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                int a0 = s0 + i * 2, a1 = a0 + 1, c0 = s0 + j * 2, c1 = c0 + 1;
+                Vector3 normal = new Vector3(outN[i].x + outN[j].x, outN[i].y + outN[j].y, 0);
+                bool flip = Vector3.Dot(Vector3.Cross(v[c0] - v[a0], v[a1] - v[a0]), normal) < 0f;
+                if (!flip) { t.Add(a0); t.Add(c0); t.Add(a1); t.Add(c0); t.Add(c1); t.Add(a1); }
+                else { t.Add(a0); t.Add(a1); t.Add(c0); t.Add(c0); t.Add(a1); t.Add(c1); }
+            }
+            var m = new Mesh { name = "AtlasRoundedSlab" };
+            m.SetVertices(v); m.SetNormals(nm); m.SetTriangles(t, 0);
+            m.RecalculateBounds();
+            return m;
+        }
+
         static void Quad(List<Vector3> v, List<int> t, List<Vector3> n, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal)
         {
             int i = v.Count;

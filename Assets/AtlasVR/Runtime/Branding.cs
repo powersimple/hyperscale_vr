@@ -21,7 +21,7 @@ namespace AtlasVR
             {
                 _emblem = new GameObject("Academy emblem").transform;
                 _emblem.SetParent(hudRoot, false);
-                Place(_emblem, 52f, -42f, 1.45f);
+                Place(_emblem, 52f, -40f, 1.45f);
                 _emblem.localScale = Vector3.one * 0.62f;
                 _spin = new GameObject("Spin").transform;
                 _spin.SetParent(_emblem, false);
@@ -35,12 +35,12 @@ namespace AtlasVR
             {
                 float w = 380f, h = w * tex.height / Mathf.Max(1, tex.width);
                 var c = UI.WorldCanvas("Academy wordmark", hudRoot, new Vector2(w + 36, h + 32), cam);
-                var bg = UI.Box("Background", c.transform, UI.Panel); UI.Stretch(bg.rectTransform);
+                var bg = UI.Box("Background", c.transform, UI.Panel); UI.Stretch(bg.rectTransform); UI.Round(bg, 22f);
                 var img = UI.Rect("Wordmark", c.transform).gameObject.AddComponent<RawImage>();
                 img.texture = tex; img.raycastTarget = false;
                 UI.Stretch(img.rectTransform, 18, 18, 16, 16);
                 UI.Slab(c);
-                Place(c.transform, -52f, -42f, 1.5f);
+                Place(c.transform, -52f, -40f, 1.5f);
                 c.transform.localScale = Vector3.one * 0.001f * 1.5f;
             }
         }

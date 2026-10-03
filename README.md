@@ -53,7 +53,7 @@ The MIT license covers the code. The data package keeps its sources' terms (Tele
 ## Heads-up display
 
 - Look up: the deck title and byline, the slide's title and subtitle.
-- Top of the view: story navigation (the Stories menu, where you are, altitude).
+- Top of the view: story navigation (a small button for each story, where you are, altitude).
 - Left: the story text and its Explore links, with the stat boxes beneath.
 - Upper right: filters, a checkbox list with full labels; each slide resets them to what it shows.
 - Lower right: data on the selected marker (hidden when nothing is selected).
@@ -65,4 +65,4 @@ The MIT license covers the code. The data package keeps its sources' terms (Tele
 
 On the globe, named data centers and power plants use the story's icons (Tabler glyphs, rendered from the web deck into `Assets/AtlasVR/Resources/AtlasIcons.png`), and the deck's power and data connections draw as glowing arcs with pulses (`layers/flows.json`, written by `_vr/export/flows.mjs`).
 
-Country and state borders come from Natural Earth (public domain), written by `_vr/export/borders.mjs` in the atlas app. The emblem mesh is baked from the Academy's glTF model by `_vr/export/bake_emblem.py` into `Assets/AtlasVR/Resources/AcademyEmblem.bytes`, so the project needs no glTF importer. Keyboard in the editor: WASD fly, Q/E zoom, J/L turn, H HUD, N north, arrows next/previous, T fly to.
+Country and state borders come from Natural Earth's 1:50m boundary lines (public domain, no coastlines), written by `_vr/export/borders.mjs` in the atlas app; countries show below about 9,000 km, states below about 2,500 km. Day and night are two terrain tilesets kept loaded side by side, so a night slide never re-images the globe. The emblem mesh is baked from the Academy's glTF model by `_vr/export/bake_emblem.py` into `Assets/AtlasVR/Resources/AcademyEmblem.bytes`, so the project needs no glTF importer. Keyboard in the editor: WASD fly, Q/E zoom, J/L turn, H HUD, N north, arrows next/previous, T fly to.

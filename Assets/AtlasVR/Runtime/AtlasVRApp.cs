@@ -94,7 +94,9 @@ namespace AtlasVR
             public float t, dur;
             public bool fade, landed;
             public Task<CesiumSampleHeightResult> ground;
-            public double groundAdd;
+            public double groundAdd, gLon, gLat;
+            public float gStart;
+            public int gTries;
         }
 
         IEnumerator Start()
@@ -230,6 +232,7 @@ namespace AtlasVR
             string line = _track == "main" ? (_slide.chapter ?? "") : (ch != null && ch.title != t.title ? t.title + " · " + ch.title : t.title);
             _hud.Show(_slide, line, id => { var x = _pkg.Track(id); return x != null ? x.title : id; });
             _hud.SetPosition(_track == "main" ? (_pkg.deck != null ? _pkg.deck.title : "Main story") : t.title, _index, t.beats.Length);
+            _hud.SetTrack(_track);
             _selected = null;
             _hud.ShowInfo(_hover, null);
             _filters.FromSlide(_slide.show, _flows.HasFlows(_slide.id));   // raises Changed, which applies the layers
@@ -351,6 +354,7 @@ namespace AtlasVR
             double lon1, lat1;
             Wgs84.Destination(lon, lat, bearing + 180, snapHeight * 2.7, out lon1, out lat1);
             StartTravel(lon1, lat1, snapHeight, bearing, false, _rig.SampleAt(lon, lat));
+            if (_travel != null) { _travel.gLon = lon; _travel.gLat = lat; }
             Haptics.Pulse(true, 0.5f, 0.08f);
         }
 
@@ -364,6 +368,7 @@ namespace AtlasVR
                 lon1 = lon1, lat1 = lat1, h1 = h1, hd1 = hd1,
                 fade = _comfort.mode == Comfort.Mode.Fade,
                 ground = ground,
+                gStart = Time.time,
             };
             double dist = Wgs84.AngleDeg(tr.lon0, tr.lat0, lon1, lat1) * Math.PI / 180 * Wgs84.A;
             tr.dur = Mathf.Clamp(1.6f + 0.55f * (float)Math.Log10(1 + dist / 1000.0), 1.6f, 5f);
@@ -384,6 +389,12 @@ namespace AtlasVR
                 double gh;
                 if (GlobeRig.SampleResult(tr.ground, out gh)) { tr.groundAdd = Math.Max(0, gh); tr.ground = null; }
                 else if (tr.ground.IsCompleted) tr.ground = null;
+                else if (Time.time - tr.gStart > 2f)
+                {
+                    // The tileset sampled may have been paused mid-flight; ask the current one, once.
+                    tr.ground = tr.gTries++ < 1 ? _rig.SampleAt(tr.gLon, tr.gLat) : null;
+                    tr.gStart = Time.time;
+                }
             }
             tr.t += dt / tr.dur;
             float t = Mathf.Clamp01(tr.t);

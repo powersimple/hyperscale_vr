@@ -1,15 +1,14 @@
 // Input, laser, comfort, and haptics.
 //
-// Drone mapping (Mode 2):
+// Drone mapping:
 //   Right stick   forward, back, strafe left and right
-//   Left stick    up/down: climb or dive (zoom); left/right: yaw
-//   Right trigger the laser: open a marker's card, close it by pointing away and pulling again
-//   B             fly to where the laser points and snap in close
-//   A             next slide            X   previous slide
-//   Y             overview (tabletop globe) or flight
-//   Left stick click  show or hide the slide station
-//   Menu          pin the wrist menu
-//   Grip (overview)   hold to drag the map; both grips to zoom
+//   Left stick    forward: zoom in (descend); back: zoom out (climb); left/right: yaw
+//   Right trigger the laser: select a marker (its data and sources show); pull on empty space to clear
+//   A             show or hide the HUD (selection and filters are kept)
+//   B             fly in to the selected marker (or wherever the laser points)
+//   Y             next slide            X   previous slide
+//   Right grip    hold for turbo (4x)   Left grip   hold for precision (1/4x)
+//   Left stick click or Menu   recenter the HUD in front of you
 // Keyboard and gamepad mirror it in the editor and for a presenter at the PC.
 using System;
 using UnityEngine;
@@ -22,7 +21,7 @@ namespace AtlasVR
     {
         public readonly InputAction rightStick, leftStick, trigger, aBtn, bBtn, xBtn, yBtn, menu, leftClick, rightGrip, leftGrip;
         public readonly InputAction rightAimPos, rightAimRot, rightGripPos, rightGripRot, rightHandPos, rightHandRot, leftPos, leftRot, leftHandPos, leftHandRot;
-        public readonly InputAction kbMove, kbClimb, kbYaw, next, prev, blank, spectator, overview, teleport, select;
+        public readonly InputAction kbMove, kbClimb, kbYaw, next, prev, blank, spectator, toggleHud, teleport, select;
 
         public Controls()
         {
@@ -69,7 +68,7 @@ namespace AtlasVR
             prev = Button("Previous", "<Keyboard>/leftArrow", "<Keyboard>/pageUp", "<Keyboard>/backspace", "<Gamepad>/buttonWest");
             blank = Button("Blank", "<Keyboard>/b", "<Keyboard>/period");
             spectator = Button("Spectator", "<Keyboard>/c");
-            overview = Button("Overview", "<Keyboard>/o", "<Gamepad>/buttonNorth");
+            toggleHud = Button("Toggle HUD", "<Keyboard>/h", "<Gamepad>/buttonNorth");
             teleport = Button("Teleport", "<Keyboard>/t", "<Gamepad>/buttonEast");
             select = Button("Select", "<Keyboard>/enter");
 
@@ -92,7 +91,7 @@ namespace AtlasVR
 
         InputAction[] All()
         {
-            return new[] { rightStick, leftStick, trigger, aBtn, bBtn, xBtn, yBtn, menu, leftClick, rightGrip, leftGrip, rightAimPos, rightAimRot, rightGripPos, rightGripRot, rightHandPos, rightHandRot, leftPos, leftRot, leftHandPos, leftHandRot, kbMove, kbClimb, kbYaw, next, prev, blank, spectator, overview, teleport, select };
+            return new[] { rightStick, leftStick, trigger, aBtn, bBtn, xBtn, yBtn, menu, leftClick, rightGrip, leftGrip, rightAimPos, rightAimRot, rightGripPos, rightGripRot, rightHandPos, rightHandRot, leftPos, leftRot, leftHandPos, leftHandRot, kbMove, kbClimb, kbYaw, next, prev, blank, spectator, toggleHud, teleport, select };
         }
 
         public static Vector2 Dead(Vector2 v, float dz = 0.15f)

@@ -34,3 +34,19 @@ Then open the project in Unity. Once it opens cleanly, commit `Packages/` and `P
 `Assets/StreamingAssets/AtlasPackage` is generated from the web deck by an export script and replaced on each export. Data credits: PeeringDB (data centers), Epoch AI (AI compute), TeleGeography Submarine Cable Map (CC BY-NC-SA 3.0); imagery and terrain from Cesium ion, Bing Maps, and Google.
 
 The MIT license covers the code. The data package keeps its sources' terms (TeleGeography's data is CC BY-NC-SA 3.0, non-commercial).
+
+## Controls (Quest)
+
+| Control | Action |
+|---|---|
+| Right stick | Fly forward, back, slide left and right |
+| Left stick | Forward zooms in, back zooms out; left and right turn |
+| Right trigger | Laser: select a marker (its data and sources show); pull on empty space to clear; press HUD buttons |
+| A | Show or hide the HUD (selection and filters are kept) |
+| B | Fly in to the selected marker, or to wherever the laser points |
+| X / Y | Previous / next slide |
+| Right grip (hold) | Turbo, 4x speed |
+| Left grip (hold) | Precision, 1/4 speed |
+| Left stick click or Menu | Recenter the HUD in front of you |
+
+The HUD rings the edges of the view: filters with sub-menus across the top, the story (headline, subtitle, text, Explore links) on the left, stats and pointer info on the right, sources and story navigation (Back, progress, Next, story list) along the bottom. Below about 350 km, labels pop up over the places ahead of you. Keyboard in the editor: WASD fly, Q/E zoom, J/L turn, H HUD, arrows next/previous, T fly to.

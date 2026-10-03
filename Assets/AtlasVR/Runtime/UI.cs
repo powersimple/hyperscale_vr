@@ -62,6 +62,9 @@ namespace AtlasVR
             return hit;
         }
 
+        /// Counts another rect (a drop-down that hangs outside its panel) as UI for the laser.
+        public static void RegisterHitRect(RectTransform rt) { if (rt != null && !Canvases.Contains(rt)) Canvases.Add(rt); }
+
         public static RectTransform Rect(string name, Transform parent)
         {
             var go = new GameObject(name, typeof(RectTransform));

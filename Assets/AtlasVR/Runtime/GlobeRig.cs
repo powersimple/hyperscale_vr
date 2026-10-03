@@ -197,7 +197,8 @@ namespace AtlasVR
         {
             Quaternion yaw = Quaternion.Euler(0, -(float)Heading, 0);
             if (mode != ViewMode.Flight) return _placeRot * yaw;
-            float up = 55f * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(8e5f, 8e6f, (float)Height));
+            // Higher up, the Earth tilts up in front of you, so you look ahead rather than down.
+            float up = 68f * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(2.5e5f, 5e6f, (float)Height));
             return Quaternion.Euler(-up, 0, 0) * yaw;
         }
 

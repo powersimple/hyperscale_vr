@@ -193,9 +193,9 @@ namespace AtlasVR
         {
             bool on = _show != null && _show.on;
             bool far = rig.ViewHeight > CountriesAbove;
-            bool dcs = on && _show.dcs && !LegendFilter.IsOff("compute:dcs");
+            bool dcs = on && _show.dcs;
             bool cty = dcs && _show.countries && far && !LegendFilter.IsOff("compute:countries");
-            bool pts = dcs && (!far || !_show.countries || LegendFilter.IsOff("compute:countries"));
+            bool pts = dcs && !cty && !LegendFilter.IsOff("compute:points");
             bool ai = on && _show.ai && !LegendFilter.IsOff("compute:ai");
             bool build = on && _show.ai && !LegendFilter.IsOff("compute:building");
 
@@ -210,7 +210,13 @@ namespace AtlasVR
             _dcRim.Draw(rig); _dcCore.Draw(rig); _ctyRim.Draw(rig); _ctyFill.Draw(rig);
             _aiGlow.Draw(rig); _aiRim.Draw(rig); _aiCore.Draw(rig); _aiBuild.Draw(rig);
             _counts.Update(rig, eye);
+            PointsVisible = pts; AiVisible = ai; BuildingVisible = build;
         }
+
+        public PkgComputeLayer Data { get { return _d; } }
+        public bool PointsVisible { get; private set; }
+        public bool AiVisible { get; private set; }
+        public bool BuildingVisible { get; private set; }
 
         public PickInfo Pick(Ray ray, GlobeRig rig, Vector3 eye, float tol, out float best)
         {
@@ -219,16 +225,16 @@ namespace AtlasVR
             if (_show == null || !_show.on) return null;
             var g = rig.GlobeToWorld;
             bool far = rig.ViewHeight > CountriesAbove;
-            if (_show.ai && !LegendFilter.IsOff("compute:ai"))
+            if (_show.ai)
             {
                 foreach (var s in _d.ai)
                 {
-                    if (s.building && LegendFilter.IsOff("compute:building")) continue;
+                    if (s.building ? LegendFilter.IsOff("compute:building") : LegendFilter.IsOff("compute:ai")) continue;
                     float a = Angle(ray, rig, g, eye, s.lon, s.lat);
                     if (a < best) { best = a; hit = AiCard(s); }
                 }
             }
-            if (_show.dcs && !LegendFilter.IsOff("compute:dcs") && hit == null)
+            if (_show.dcs && hit == null)
             {
                 if (far && _show.countries && !LegendFilter.IsOff("compute:countries"))
                 {
@@ -242,7 +248,7 @@ namespace AtlasVR
                         }
                     }
                 }
-                else
+                else if (!LegendFilter.IsOff("compute:points"))
                 {
                     foreach (var p in _d.dcs)
                     {
@@ -293,6 +299,8 @@ namespace AtlasVR
 
     public class CableLayer : IPickable
     {
+        public bool LandingsVisible { get; private set; }
+        public PkgTeleLayer Data { get { return _d; } }
         readonly PkgTeleLayer _d;
         readonly Mesh _mesh;
         readonly Material _mat;
@@ -409,6 +417,7 @@ namespace AtlasVR
                 Graphics.RenderMesh(rp, _mesh, 0, Matrix4x4.identity);
             }
             _landRim.visible = _landCore.visible = on && _show.landings && !LegendFilter.IsOff("tc:landings");
+            LandingsVisible = _landRim.visible;
             _landRim.Draw(rig); _landCore.Draw(rig);
         }
 
@@ -455,6 +464,13 @@ namespace AtlasVR
         readonly List<PkgPlant> _shownPw = new List<PkgPlant>();
         static readonly Color DcColor = Hex.Color("#4dabf7"), Highlight = Hex.Color("#ffd43b");
 
+        public List<PkgSite> ShownDataCenters { get { return _shownDc; } }
+        public List<PkgPlant> ShownPlants { get { return _shownPw; } }
+        /// Ids that already carry a site label (proximity labels skip them).
+        public readonly HashSet<string> Labeled = new HashSet<string>();
+        /// Category gates from the filter row; highlighted ids of a gated category stay hidden.
+        public bool dataCentersOn = true, plantsOn = true;
+
         public SitesLayer(PkgSites d, Transform parent)
         {
             _d = d;
@@ -489,27 +505,28 @@ namespace AtlasVR
 
         public void SetShow(PkgShow show)
         {
-            _shownDc.Clear(); _shownPw.Clear(); _labels.Clear();
+            _shownDc.Clear(); _shownPw.Clear(); _labels.Clear(); Labeled.Clear();
             var hl = new HashSet<string>(show != null && show.highlight != null ? show.highlight : new string[0]);
             var lab = new HashSet<string>(show != null && show.labels != null ? show.labels : new string[0]);
             var rc = new List<MarkerDef>(); var cc = new List<MarkerDef>();
             if (show != null && _d != null)
             {
-                foreach (var s in _d.datacenters)
+                if (dataCentersOn) foreach (var s in _d.datacenters)
                 {
                     if (!Matches(show.dc, s.id, s.region, s.kind) && !hl.Contains(s.id)) continue;
                     _shownDc.Add(s);
                     bool h = hl.Contains(s.id);
                     rc.Add(new MarkerDef(s.lon, s.lat, h ? 1.5f * 1.24f : 1.24f, h ? Highlight : Color.white)); cc.Add(new MarkerDef(s.lon, s.lat, h ? 1.5f : 1f, DcColor));
-                    if (lab.Contains(s.id) || h) _labels.Add(s.name, s.lon, s.lat, Color.white);
+                    if (lab.Contains(s.id) || h) { _labels.Add(s.name, s.lon, s.lat, Color.white); Labeled.Add(s.id); }
                 }
-                foreach (var p in _d.plants)
+                if (plantsOn) foreach (var p in _d.plants)
                 {
                     if (!Matches(show.power, p.id, p.fuel, null) && !hl.Contains(p.id)) continue;
+                    if (!string.IsNullOrEmpty(p.fuel) && LegendFilter.IsOff("fuel:" + p.fuel)) continue;
                     _shownPw.Add(p);
                     bool h = hl.Contains(p.id);
                     rc.Add(new MarkerDef(p.lon, p.lat, (h ? 1.4f : 0.9f) * 1.24f, h ? Highlight : new Color(0.05f, 0.05f, 0.05f, 1f))); cc.Add(new MarkerDef(p.lon, p.lat, h ? 1.4f : 0.9f, FuelColor(p.fuel)));
-                    if (lab.Contains(p.id) || h) _labels.Add(p.name, p.lon, p.lat, Color.white);
+                    if (lab.Contains(p.id) || h) { _labels.Add(p.name, p.lon, p.lat, Color.white); Labeled.Add(p.id); }
                 }
             }
             _rim.Set(rc); _core.Set(cc);

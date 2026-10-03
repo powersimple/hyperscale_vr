@@ -1,0 +1,2 @@
+D:\Academy\Ben-Presentations\Public Hyperscale\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+D:\Academy\Ben-Presentations\Public Hyperscale\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

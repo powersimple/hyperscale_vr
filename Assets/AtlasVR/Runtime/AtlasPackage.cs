@@ -21,6 +21,9 @@ namespace AtlasVR
         public PkgComputeLayer compute;
         public PkgTeleLayer tele;
         public PkgSites sites;
+        public PkgBorders borders;
+        public PkgRegions regions;
+        public PkgFlows flows;
         public string error;
 
         readonly Dictionary<string, PkgSlide> _slides = new Dictionary<string, PkgSlide>();
@@ -96,6 +99,9 @@ namespace AtlasVR
             yield return ReadText("layers/compute.json", optional); if (txt != null) pkg.compute = JsonUtility.FromJson<PkgComputeLayer>(txt); txt = null;
             yield return ReadText("layers/telecables.json", optional); if (txt != null) pkg.tele = JsonUtility.FromJson<PkgTeleLayer>(txt); txt = null;
             yield return ReadText("layers/sites.json", optional); if (txt != null) pkg.sites = JsonUtility.FromJson<PkgSites>(txt); txt = null;
+            yield return ReadText("layers/borders.json", optional); if (txt != null) pkg.borders = JsonUtility.FromJson<PkgBorders>(txt); txt = null;
+            yield return ReadText("layers/regions.json", optional); if (txt != null) pkg.regions = JsonUtility.FromJson<PkgRegions>(txt); txt = null;
+            yield return ReadText("layers/flows.json", optional); if (txt != null) pkg.flows = JsonUtility.FromJson<PkgFlows>(txt); txt = null;
 
             if (pkg.slides != null) foreach (var s in pkg.slides) pkg._slides[s.id] = s;
             if (pkg.refs != null) foreach (var r in pkg.refs) pkg._refs[r.id] = r;

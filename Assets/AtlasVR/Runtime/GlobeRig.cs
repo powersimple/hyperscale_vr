@@ -48,6 +48,36 @@ namespace AtlasVR
         public double GroundHeight { get; private set; }
         public double ViewHeight { get { return mode == ViewMode.Flight ? Math.Max(1, Height - GroundHeight) : Height; } }
 
+        /// 0 when flying low, 1 in orbit. In orbit the Earth stands north-up in front of you and
+        /// does not turn or roll under the sticks; lower down you can face any direction.
+        public float OrbitBlend { get { return mode != ViewMode.Flight ? 0f : Mathf.SmoothStep(0f, 1f, LogRamp(Height, OrbitFrom, OrbitFull)); } }
+        public const double OrbitFrom = 6.0e5, OrbitFull = 2.0e6;
+
+        /// The heading the view actually uses: the viewer's heading low down, north in orbit.
+        public double ViewHeading
+        {
+            get
+            {
+                double h = Heading > 180 ? Heading - 360 : Heading;
+                return h * (1.0 - OrbitBlend);
+            }
+        }
+
+        /// Geographic north as a horizontal direction in the world (for the compass).
+        public Vector3 NorthWorld
+        {
+            get
+            {
+                Quaternion yaw = Quaternion.Euler(0, -(float)ViewHeading, 0);
+                return mode == ViewMode.Flight ? yaw * Vector3.forward : _placeRot * yaw * Vector3.forward;
+            }
+        }
+
+        static float LogRamp(double v, double from, double to)
+        {
+            return Mathf.Clamp01((float)((Math.Log(Math.Max(1, v)) - Math.Log(from)) / (Math.Log(to) - Math.Log(from))));
+        }
+
         public Matrix4x4 GlobeToWorld { get; private set; }
         public Matrix4x4 WorldToGlobe { get; private set; }
         public float GlobeScale { get; private set; }
@@ -59,6 +89,13 @@ namespace AtlasVR
         public float BallRadius { get; private set; }
         public bool PhotorealShowing { get { return _photorealOn; } }
         public D3 CameraEcef { get; private set; }
+
+        /// True until the terrain and imagery for the first view have loaded. Until then the tiles
+        /// stay hidden (untextured tiles would show white) and a dark globe with the borders stands in.
+        public bool Loading { get; private set; }
+        public float LoadPercent { get; private set; }
+        float _loadStart;
+        GameObject _under;
 
         // Tilesets are hidden by camera layer rather than disabled: disabling a Cesium tileset
         // destroys it, and the reload would leave the globe blank for seconds.
@@ -136,6 +173,18 @@ namespace AtlasVR
 
             _atmo = new Atmosphere();
 
+            // A dark ocean-blue Earth just under the terrain: it stands in while the first tiles load
+            // and fills any gap at the horizon afterwards, so nothing white or empty shows.
+            _under = new GameObject("Earth underlay");
+            _under.transform.SetParent(transform, false);
+            _under.AddComponent<MeshFilter>().sharedMesh = Meshes.Sphere(48, 96);
+            var um = new Material(Shader.Find("AtlasVR/Solid"));
+            um.SetColor("_Color", new Color(0.035f, 0.075f, 0.13f, 1f));
+            _under.AddComponent<MeshRenderer>().sharedMaterial = um;
+            Loading = true;
+            _loadStart = Time.time;
+            SetLayerVisible(TerrainLayer, false);
+
             Lon = -40; Lat = 25; Height = 1.6e7; Heading = 0;
         }
 
@@ -145,7 +194,7 @@ namespace AtlasVR
             ts.createPhysicsMeshes = false;          // ground height comes from height sampling instead
             ts.maximumScreenSpaceError = quest ? 24f : 12f;
             ts.maximumSimultaneousTileLoads = quest ? 14u : 24u;
-            ts.maximumCachedBytes = quest ? 256L * 1024 * 1024 : 1024L * 1024 * 1024; // two tilesets stay resident
+            ts.maximumCachedBytes = quest ? 512L * 1024 * 1024 : 1024L * 1024 * 1024; // two tilesets stay resident
             ts.preloadSiblings = !quest;
             ts.forbidHoles = false;
         }
@@ -195,17 +244,18 @@ namespace AtlasVR
         /// The rotation that carries the map's east-up-north frame at the origin into the world.
         Quaternion WorldRotation()
         {
-            Quaternion yaw = Quaternion.Euler(0, -(float)Heading, 0);
+            Quaternion yaw = Quaternion.Euler(0, -(float)ViewHeading, 0);
             if (mode != ViewMode.Flight) return _placeRot * yaw;
-            // Higher up, the Earth tilts up in front of you, so you look ahead rather than down.
-            float up = 68f * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(2.5e5f, 5e6f, (float)Height));
+            // Higher up, the Earth tilts up in front of you, so you look ahead rather than down. The
+            // ramp runs on a log scale, so the globe stays in front until you are low over the ground.
+            float up = 68f * Mathf.SmoothStep(0f, 1f, LogRamp(Height, 4000, 1.5e6));
             return Quaternion.Euler(-up, 0, 0) * yaw;
         }
 
         /// Ground distance (east, north, in meters) for a horizontal world-space direction.
         public void Travel(Vector3 worldDir, double meters)
         {
-            Vector3 local = Quaternion.Inverse(Quaternion.Euler(0, -(float)Heading, 0) * (mode == ViewMode.Flight ? Quaternion.identity : _placeRot)) * worldDir;
+            Vector3 local = Quaternion.Inverse(Quaternion.Euler(0, -(float)ViewHeading, 0) * (mode == ViewMode.Flight ? Quaternion.identity : _placeRot)) * worldDir;
             local.y = 0;
             if (local.sqrMagnitude < 1e-8f) return;
             local.Normalize();
@@ -244,7 +294,7 @@ namespace AtlasVR
                 oH = Height;
                 // The origin is the point at the viewer's feet (the play area's center); in space the
                 // world pivots about eye height above it.
-                anchor = pivot + rot * Quaternion.Inverse(Quaternion.Euler(0, -(float)Heading, 0)) * (floor - pivot);
+                anchor = pivot + rot * Quaternion.Inverse(Quaternion.Euler(0, -(float)ViewHeading, 0)) * (floor - pivot);
                 LensActive = false;
                 BallRadius = (float)(Wgs84.A * s);
                 BallCenter = anchor - (rot * Vector3.up) * (float)((Wgs84.A + Height) * s);
@@ -300,6 +350,9 @@ namespace AtlasVR
                 _table.transform.SetPositionAndRotation(_placeFloor, _placeRot);
                 _table.transform.localScale = new Vector3((LensMax + 0.06f) * 2f, TableTop, (LensMax + 0.06f) * 2f);
             }
+
+            UpdateLoading();
+            UpdateUnderlay();
 
             // Day or night imagery; photorealistic tiles for close views.
             if (_night.enabled != _nightOn) { _night.enabled = _nightOn; _imagery.enabled = !_nightOn; }
@@ -373,9 +426,41 @@ namespace AtlasVR
                 Photoreal.suspendUpdate = true;
         }
 
+        void UpdateLoading()
+        {
+            if (!Loading) return;
+            float p = 0f;
+            try { p = Terrain.ComputeLoadProgress(); } catch (Exception) { }
+            float since = Time.time - _loadStart;
+            LoadPercent = since < 1f ? 0f : Mathf.Max(LoadPercent, p);
+            // Progress reads 100 before the first tiles are even requested, so give it a moment.
+            if ((since > 2.5f && p >= 97f) || since > 40f)
+            {
+                Loading = false;
+                LoadPercent = 100f;
+                if (!_photorealOn || _terrainShown) SetLayerVisible(TerrainLayer, true);
+            }
+        }
+
+        void UpdateUnderlay()
+        {
+            // High enough that the sphere's float precision is not visible against the terrain.
+            bool show = mode == ViewMode.Flight && (Loading || ViewHeight > 40000);
+            if (_under.activeSelf != show) _under.SetActive(show);
+            if (!show) return;
+            // ECEF to the world flips handedness, so build the pose from the axes rather than decomposing
+            // the matrix: the sphere's pole (+Y) goes on the Earth's axis (ECEF Z).
+            Matrix4x4 g = Georef.transform.localToWorldMatrix * ToMatrix(Georef.ecefToLocalMatrix);
+            Vector3 ex = g.GetColumn(0), ez = g.GetColumn(2);
+            _under.transform.SetPositionAndRotation(g.GetColumn(3), Quaternion.LookRotation(ex, ez));
+            float ra = ex.magnitude * (float)(Wgs84.A * 0.998), rb = ez.magnitude * (float)(Wgs84.B * 0.998);
+            _under.transform.localScale = new Vector3(ra, rb, ra);
+        }
+
         void SetLayerVisible(int layer, bool on)
         {
             if (_cam == null) return;
+            if (layer == TerrainLayer && on && Loading) return;   // revealed when loading finishes
             if (on) _cam.cullingMask |= 1 << layer; else _cam.cullingMask &= ~(1 << layer);
         }
 

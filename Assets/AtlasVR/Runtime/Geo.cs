@@ -2,6 +2,7 @@
 // Layers keep their geometry in Earth-centered, Earth-fixed (ECEF) meters; the globe rig
 // supplies one matrix per frame that carries ECEF into the Unity world.
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace AtlasVR
@@ -23,6 +24,7 @@ namespace AtlasVR
     public static class Wgs84
     {
         public const double A = 6378137.0;
+        public const double B = 6356752.314245;   // polar radius
         const double F = 1.0 / 298.257223563;
         const double E2 = F * (2 - F);
         const double Deg = Math.PI / 180.0;
@@ -145,6 +147,69 @@ namespace AtlasVR
             }
             var m = new Mesh { name = "AtlasRing", vertices = v, triangles = t };
             m.RecalculateBounds();
+            return m;
+        }
+
+        /// A panel backing: a box behind the rect (x0..x1, y0..y1) from z0 back to z0 + depth, its
+        /// front edge chamfered by bevel so the rim catches the light. The front faces -z (the viewer).
+        public static Mesh Slab(float x0, float y0, float x1, float y1, float z0, float depth, float bevel)
+        {
+            var v = new List<Vector3>(); var t = new List<int>(); var n = new List<Vector3>();
+            float b = Mathf.Min(bevel, Mathf.Min(x1 - x0, y1 - y0) * 0.25f), zb = z0 + b, zk = z0 + depth;
+            Vector3 f00 = new Vector3(x0 + b, y0 + b, z0), f10 = new Vector3(x1 - b, y0 + b, z0), f11 = new Vector3(x1 - b, y1 - b, z0), f01 = new Vector3(x0 + b, y1 - b, z0);
+            Vector3 r00 = new Vector3(x0, y0, zb), r10 = new Vector3(x1, y0, zb), r11 = new Vector3(x1, y1, zb), r01 = new Vector3(x0, y1, zb);
+            Vector3 k00 = new Vector3(x0, y0, zk), k10 = new Vector3(x1, y0, zk), k11 = new Vector3(x1, y1, zk), k01 = new Vector3(x0, y1, zk);
+            Quad(v, t, n, f00, f10, f11, f01, Vector3.back);                         // front
+            Quad(v, t, n, f01, f11, r11, r01, new Vector3(0, 1, -1).normalized);     // bevels
+            Quad(v, t, n, f00, r00, r10, f10, new Vector3(0, -1, -1).normalized);
+            Quad(v, t, n, f00, f01, r01, r00, new Vector3(-1, 0, -1).normalized);
+            Quad(v, t, n, f10, r10, r11, f11, new Vector3(1, 0, -1).normalized);
+            Quad(v, t, n, r01, r11, k11, k01, Vector3.up);                           // sides
+            Quad(v, t, n, r00, k00, k10, r10, Vector3.down);
+            Quad(v, t, n, r00, r01, k01, k00, Vector3.left);
+            Quad(v, t, n, r10, k10, k11, r11, Vector3.right);
+            var m = new Mesh { name = "AtlasSlab" };
+            m.SetVertices(v); m.SetNormals(n); m.SetTriangles(t, 0);
+            m.RecalculateBounds();
+            return m;
+        }
+
+        static void Quad(List<Vector3> v, List<int> t, List<Vector3> n, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal)
+        {
+            int i = v.Count;
+            v.Add(a); v.Add(b); v.Add(c); v.Add(d);
+            for (int k = 0; k < 4; k++) n.Add(normal);
+            // Unity draws clockwise triangles; order each quad so its front faces the normal.
+            bool flip = Vector3.Dot(Vector3.Cross(b - a, c - a), normal) < 0f;
+            if (!flip) { t.Add(i); t.Add(i + 1); t.Add(i + 2); t.Add(i); t.Add(i + 2); t.Add(i + 3); }
+            else { t.Add(i); t.Add(i + 2); t.Add(i + 1); t.Add(i); t.Add(i + 3); t.Add(i + 2); }
+        }
+
+        /// Unit sphere (radius 1).
+        public static Mesh Sphere(int rings, int segments)
+        {
+            var v = new List<Vector3>(); var t = new List<int>();
+            for (int r = 0; r <= rings; r++)
+            {
+                float th = Mathf.PI * r / rings;
+                for (int s = 0; s <= segments; s++)
+                {
+                    float ph = 2f * Mathf.PI * s / segments;
+                    v.Add(new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph)));
+                }
+            }
+            int w = segments + 1;
+            for (int r = 0; r < rings; r++)
+                for (int s = 0; s < segments; s++)
+                {
+                    int a = r * w + s, b = a + w;
+                    // Clockwise seen from outside.
+                    t.Add(a); t.Add(a + 1); t.Add(b);
+                    t.Add(a + 1); t.Add(b + 1); t.Add(b);
+                }
+            var m = new Mesh { name = "AtlasSphere" };
+            m.SetVertices(v); m.SetNormals(v); m.SetTriangles(t, 0);
+            m.bounds = new Bounds(Vector3.zero, Vector3.one * 2f);
             return m;
         }
 

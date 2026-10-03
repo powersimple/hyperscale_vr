@@ -39,21 +39,26 @@ namespace AtlasVR
                     if (!string.IsNullOrEmpty(p.fuel) && !fuels.Contains(p.fuel)) fuels.Add(p.fuel);
             fuels.Sort();
             foreach (var f in fuels) power.children.Add(new FilterItem("power." + f, char.ToUpper(f[0]) + f.Substring(1)));
+            var flows = new FilterItem("flows", "Power and data connections");
             var named = new FilterItem("sites", "Named sites");
-            var labels = new FilterItem("labels", "Labels");
-            var night = new FilterItem("night", "Night");
-            var photo = new FilterItem("photoreal", "3D cities");
-            categories.AddRange(new[] { dc, ai, cables, power, named, labels, night, photo });
+            var borders = new FilterItem("borders", "Borders");
+            borders.children.Add(new FilterItem("borders.countries", "Countries and coasts"));
+            borders.children.Add(new FilterItem("borders.states", "States and provinces"));
+            var labels = new FilterItem("labels", "Place labels up close");
+            var night = new FilterItem("night", "Night lights");
+            var photo = new FilterItem("photoreal", "3D cities up close");
+            categories.AddRange(new[] { dc, ai, cables, power, flows, named, borders, labels, night, photo });
 
-            panels.Add(new FilterItem("panel.story", "Story"));
+            panels.Add(new FilterItem("panel.story", "Story and title"));
             panels.Add(new FilterItem("panel.stats", "Stats"));
-            panels.Add(new FilterItem("panel.info", "Pointer info"));
+            panels.Add(new FilterItem("panel.info", "Selection data"));
             panels.Add(new FilterItem("panel.sources", "Sources"));
 
             // Sub-items and panels start on; labels and 3D cities start on.
             foreach (var c in categories) foreach (var s in c.children) _on[s.key] = true;
             foreach (var p in panels) _on[p.key] = true;
             _on["labels"] = true;
+            _on["borders"] = true;
             _on["photoreal"] = true;
         }
 
@@ -72,7 +77,7 @@ namespace AtlasVR
         }
 
         /// A slide's starting state.
-        public void FromSlide(PkgShow s)
+        public void FromSlide(PkgShow s, bool flows = false)
         {
             _forced.Clear();
             // Sub-items go back on each slide; the viewer's sub-filter changes last one slide.
@@ -86,6 +91,7 @@ namespace AtlasVR
             _on["power"] = s != null && s.power != null && s.power.Length > 0;
             _on["sites"] = s != null && ((s.dc != null && s.dc.Length > 0) || (s.highlight != null && s.highlight.Length > 0));
             _on["night"] = s != null && s.night >= 0.5f;
+            _on["flows"] = flows;
             Raise();
         }
 

@@ -59,6 +59,13 @@ namespace AtlasVR
         CableLayer _cables;
         SitesLayer _sites;
         ProximityLabels _proximity;
+        BorderLayer _borders;
+        FlowLayer _flows;
+        Compass _compass;
+        Regions _regions;
+        bool _northing, _moving;
+        float _placeNext;
+        Branding _branding;
         readonly List<IPickable> _pickables = new List<IPickable>();
 
         Camera _cam;
@@ -120,6 +127,8 @@ namespace AtlasVR
             if (_pkg.tele != null) { _cables = new CableLayer(_pkg.tele); _pickables.Add(_cables); }
             if (_pkg.sites != null) { _sites = new SitesLayer(_pkg.sites, layerRoot); _pickables.Add(_sites); }
             _proximity = new ProximityLabels(layerRoot);
+            _borders = new BorderLayer(_pkg.borders);
+            _flows = new FlowLayer(_pkg.flows); _pickables.Add(_flows);
 
             _filters = new Filters(_pkg.sites);
             _filters.Seed("photoreal", photorealCloseUps);
@@ -130,6 +139,9 @@ namespace AtlasVR
             _filters.Changed += ApplyFilters;
             _credits = new VRCredits(null, _cam, "Data centers: PeeringDB. AI compute: Epoch AI. Submarine cables: TeleGeography (CC BY-NC-SA 3.0).");
             _hud.PlaceCredits(_credits.canvas);
+            _branding = new Branding(_hud.root, _cam);
+            _compass = new Compass(_hud.root);
+            _regions = new Regions(_pkg.regions);
             _hud.ShowInfo(null, null);
             _spectator = new Spectator(_eye);
             SubscribeRecenter();
@@ -220,7 +232,7 @@ namespace AtlasVR
             _hud.SetPosition(_track == "main" ? (_pkg.deck != null ? _pkg.deck.title : "Main story") : t.title, _index, t.beats.Length);
             _selected = null;
             _hud.ShowInfo(_hover, null);
-            _filters.FromSlide(_slide.show);   // raises Changed, which applies the layers
+            _filters.FromSlide(_slide.show, _flows.HasFlows(_slide.id));   // raises Changed, which applies the layers
 
             var c = _slide.camera;
             if (HasCamera(c)) Fly(c, instant && !introDescent);
@@ -262,6 +274,10 @@ namespace AtlasVR
             _rig.SetSlideLayers(_filters.On("night") ? 1f : 0f, s != null && s.photoreal && _filters.On("photoreal"), false);
             _rig.photorealCloseUps = _filters.On("photoreal");
             _proximity.enabled = _filters.On("labels");
+            bool slideFlows = _slide != null && _flows.HasFlows(_slide.id);
+            _flows.SetShow(_slide != null ? _slide.id : null, _filters.On("flows"), !slideFlows);   // the slide's own arcs, or all of them when the viewer turns connections on
+            _borders.countriesOn = _filters.On("borders") && _filters.On("borders.countries");
+            _borders.statesOn = _filters.On("borders") && _filters.On("borders.states");
         }
 
         void Next()
@@ -408,7 +424,9 @@ namespace AtlasVR
             //   X / Y      previous / next slide
             //   Left stick click, Menu   bring the display back in front
             if (_in.aBtn.WasPressedThisFrame() || _in.toggleHud.WasPressedThisFrame()) _hud.Visible = !_hud.Visible;
-            if (_in.yBtn.WasPressedThisFrame() || _in.next.WasPressedThisFrame()) Next();
+            if (_in.next.WasPressedThisFrame()) Next();
+            // Y turns you back to face north (in orbit the globe is already north-up).
+            if (_in.yBtn.WasPressedThisFrame() || _in.north.WasPressedThisFrame()) { if (_travel != null && _travel.fade) _comfort.FadeTo(0f); _northing = true; _travel = null; }
             if (_in.xBtn.WasPressedThisFrame() || _in.prev.WasPressedThisFrame()) Prev();
             if (_in.leftClick.WasPressedThisFrame() || _in.menu.WasPressedThisFrame()) { _hud.Recenter(); _hud.Visible = true; }
             if (_in.blank.WasPressedThisFrame()) _comfort.FadeTo(_comfort.FadeAlpha > 0.5f ? 0f : 1f);
@@ -420,7 +438,11 @@ namespace AtlasVR
             l.y -= _in.kbClimb.ReadValue<float>();
             l.x += _in.kbYaw.ReadValue<float>();
             r = Vector2.ClampMagnitude(r, 1f); l.x = Mathf.Clamp(l.x, -1f, 1f); l.y = Mathf.Clamp(l.y, -1f, 1f);
+            // In orbit the globe stays north-up and still: no sliding or turning, only zoom (and B to fly in).
+            float free = 1f - _rig.OrbitBlend;
+            r *= free; l.x *= free;
             bool userMoving = r.sqrMagnitude > 0.0001f || Mathf.Abs(l.x) > 0.01f || Mathf.Abs(l.y) > 0.01f;
+            if (Mathf.Abs(l.x) > 0.05f) _northing = false;   // turning by hand takes over
             if (userMoving) { if (_travel != null && _travel.fade) _comfort.FadeTo(0f); _travel = null; _rig.StopSpin(); }
 
             // Grips: right holds turbo, left holds fine control.
@@ -450,6 +472,16 @@ namespace AtlasVR
                 }
                 else if (Mathf.Abs(_yawVel) > 1e-3f) _rig.Turn(_yawVel * yawRate * dt);
 
+                if (_northing)
+                {
+                    // The bearing you face is your head's yaw plus the map heading; turn the map until it is 0.
+                    Vector3 ff = Flat(_eye.forward);
+                    double eyeYaw = ff.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(ff).eulerAngles.y : 0.0;
+                    double hd = (_rig.Heading + eyeYaw) % 360.0; if (hd > 180) hd -= 360; if (hd < -180) hd += 360;
+                    if (Math.Abs(hd) < 0.3) { _rig.Turn(-hd); _northing = false; }
+                    else _rig.Turn(-hd * (1.0 - Math.Exp(-dt * 3.5)));
+                }
+
                 float motion = Mathf.Clamp01((_vel.magnitude * 0.9f + Mathf.Abs(_climbVel) * 0.5f + (snapTurn ? 0f : Mathf.Abs(_yawVel))) * Mathf.Min(1.5f, mult));
                 _comfort.Tick(motion, dt);
                 Rumble(motion, dt);
@@ -461,6 +493,7 @@ namespace AtlasVR
                 Rumble(motion, dt);
             }
 
+            _moving = userMoving || _northing || _travel != null || _vel.magnitude > 0.05f || Mathf.Abs(_yawVel) > 0.05f || Mathf.Abs(_climbVel) > 0.05f;
             Pointer();
         }
 
@@ -568,20 +601,37 @@ namespace AtlasVR
             if (_rig == null) return;
             if (_compute != null) _compute.Draw(_rig, _eye);
             if (_cables != null) _cables.Draw(_rig);
+            _borders.Draw(_rig);
+            _flows.Draw(_rig);
             if (_sites != null) _sites.Draw(_rig, _eye);
             _proximity.Update(_rig, _eye, _compute, _cables, _sites);
             _hud.Follow(_eye);
             _credits.Tick();
+            _branding.Update();
+            _compass.Update(_rig, _eye, _hud.root, _moving);
+            if (Time.unscaledTime >= _placeNext) { _placeNext = Time.unscaledTime + 0.5f; UpdatePlace(); }
+            _hud.SetLoading(_rig.Loading ? _rig.LoadPercent : -1f);
             _spectator.Tick(_cam);
             if (Time.unscaledTime >= _statusNext) { _statusNext = Time.unscaledTime + 0.25f; _hud.SetStatus(Status()); }
         }
 
         float _statusNext;
+
+        /// The place under you and your coordinates, upper right, while you are below orbit.
+        void UpdatePlace()
+        {
+            if (_rig.mode != ViewMode.Flight || _rig.ViewHeight > GlobeRig.OrbitFrom) { _hud.SetLocation(null, null); return; }
+            string place;
+            if (!_regions.HasData) place = "";
+            else if (!_regions.Lookup(_rig.Lon, _rig.Lat, out place)) place = "Open water";
+            string coords = Math.Abs(_rig.Lat).ToString("0.000") + "° " + (_rig.Lat >= 0 ? "N" : "S") + "   " + Math.Abs(_rig.Lon).ToString("0.000") + "° " + (_rig.Lon >= 0 ? "E" : "W");
+            _hud.SetLocation(place, coords);
+        }
         string Status()
         {
             double h = _rig.ViewHeight;
             string alt = h >= 1e5 ? (h / 1000).ToString("N0") + " km" : h >= 1e4 ? (h / 1000).ToString("0.0") + " km" : h.ToString("N0") + " m";
-            return alt + "   " + Math.Abs(_rig.Lat).ToString("0.0") + (_rig.Lat >= 0 ? "N " : "S ") + Math.Abs(_rig.Lon).ToString("0.0") + (_rig.Lon >= 0 ? "E" : "W");
+            return "Altitude  " + alt;
         }
 
         void ShowError(string message)

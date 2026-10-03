@@ -75,6 +75,12 @@ namespace AtlasVR
     [Serializable] public class PkgTeleLayer { public PkgCable[] cables; public PkgLanding[] landings; public string[] refs; }
     [Serializable] public class PkgCable { public string id, name, color; public PkgLine[] lines; }
     [Serializable] public class PkgLine { public double[] lonlat; }
+    [Serializable] public class PkgBorders { public PkgLine[] countries; public PkgLine[] states; }
+    [Serializable] public class PkgRegions { public PkgRegion[] regions; }
+    [Serializable] public class PkgFlows { public PkgFlow[] flows; public PkgSlideFlows[] slides; }
+    [Serializable] public class PkgFlow { public string id, kind, from, to, color, builder; public double lon0, lat0, lon1, lat1, lift, minH, maxH; public float width, speed, count; }
+    [Serializable] public class PkgSlideFlows { public string id; public string[] flows; }
+    [Serializable] public class PkgRegion { public string name, country, type; public double[] bbox; public PkgLine[] rings; }
     [Serializable] public class PkgLanding { public double lon, lat; public string name; }
 
     [Serializable] public class PkgSites { public PkgSite[] datacenters; public PkgPlant[] plants; }

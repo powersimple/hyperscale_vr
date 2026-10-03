@@ -40,6 +40,7 @@ namespace AtlasVR
                 t.alignment = TextAlignmentOptions.Bottom;
                 t.textWrappingMode = TextWrappingModes.NoWrap;
                 t.color = Color.white;
+                UI.OverText(t);
                 go.SetActive(false);
                 _pool.Add(t);
             }
@@ -118,9 +119,11 @@ namespace AtlasVR
             {
                 bool use = i < _shown.Count;
                 if (_pool[i].gameObject.activeSelf != use) _pool[i].gameObject.SetActive(use);
-                if (use) _pool[i].text = "<b>" + Hud.Esc(_shown[i].title) + "</b>\n<size=70%><color=#A6B6C8>" + Hud.Esc(_shown[i].line) + "</color></size>";
+                if (use) SetText(_pool[i], "<b>" + Hud.Esc(_shown[i].title) + "</b>\n<size=70%><color=#A6B6C8>" + Hud.Esc(_shown[i].line) + "</color></size>");
             }
         }
+
+        static void SetText(TextMeshPro t, string s) { if (t.text != s) t.text = s; }
 
         void Place(GlobeRig rig, Transform eye)
         {
@@ -130,8 +133,8 @@ namespace AtlasVR
                 Vector3 w = rig.WorldOf(c.lon, c.lat, Math.Max(0, rig.GroundHeight));
                 var t = _pool[i].transform;
                 float dist = Vector3.Distance(eye.position, w);
-                float s = 0.016f * dist;          // about the same angular size at any distance
-                t.position = w + Vector3.up * s * 0.9f;
+                float s = 0.0105f * dist;          // about the same angular size at any distance
+                t.position = w + (w - rig.BallCenter).normalized * s * 1.1f;   // just above the marker, along the local up
                 t.rotation = Quaternion.LookRotation(t.position - eye.position, Vector3.up);
                 t.localScale = Vector3.one * s;
             }

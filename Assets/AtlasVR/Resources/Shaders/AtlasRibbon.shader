@@ -7,6 +7,7 @@ Shader "AtlasVR/Ribbon"
     {
         _WidthWS ("Width (world meters)", Float) = 0.0012
         _LiftWS ("Lift above the surface (world meters)", Float) = 0.0015
+        _Tint ("Tint", Color) = (1, 1, 1, 1)
     }
     SubShader
     {
@@ -36,6 +37,7 @@ Shader "AtlasVR/Ribbon"
             CBUFFER_START(UnityPerMaterial)
                 float _WidthWS;
                 float _LiftWS;
+                float4 _Tint;
             CBUFFER_END
 
             struct Attributes
@@ -70,7 +72,7 @@ Shader "AtlasVR/Ribbon"
                 float3 ws = centerW + sideW * (v.uv.x * 0.5 * _WidthWS * v.uv.y * dist) + upW * (_LiftWS * dist);
                 o.positionWS = ws;
                 o.positionCS = TransformWorldToHClip(ws);
-                o.color = v.color;
+                o.color = v.color * _Tint;
                 if (dot(v.positionOS.xyz, -rel) < 0.0) o.color.a = 0.0; // behind the horizon
                 return o;
             }

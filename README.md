@@ -39,14 +39,30 @@ The MIT license covers the code. The data package keeps its sources' terms (Tele
 
 | Control | Action |
 |---|---|
-| Right stick | Fly forward, back, slide left and right |
-| Left stick | Forward zooms in, back zooms out; left and right turn |
+| Right stick | Fly forward, back, slide left and right (off in orbit, where the Earth stays north-up) |
+| Left stick | Forward zooms in, back zooms out; left and right turn (turning is off in orbit) |
 | Right trigger | Laser: select a marker (its data and sources show); pull on empty space to clear; press HUD buttons |
 | A | Show or hide the HUD (selection and filters are kept) |
 | B | Fly in to the selected marker, or to wherever the laser points |
-| X / Y | Previous / next slide |
+| Y | Turn to face north |
+| X | Previous slide (Next is on the HUD) |
 | Right grip (hold) | Turbo, 4x speed |
 | Left grip (hold) | Precision, 1/4 speed |
 | Left stick click or Menu | Recenter the HUD in front of you |
 
-The HUD rings the edges of the view: filters with sub-menus across the top, the story (headline, subtitle, text, Explore links) on the left, stats and pointer info on the right, sources and story navigation (Back, progress, Next, story list) along the bottom. Below about 350 km, labels pop up over the places ahead of you. Keyboard in the editor: WASD fly, Q/E zoom, J/L turn, H HUD, arrows next/previous, T fly to.
+## Heads-up display
+
+- Look up: the deck title and byline, the slide's title and subtitle.
+- Top of the view: story navigation (the Stories menu, where you are, altitude).
+- Left: the story text and its Explore links, with the stat boxes beneath.
+- Upper right: filters, a checkbox list with full labels; each slide resets them to what it shows.
+- Lower right: data on the selected marker (hidden when nothing is selected).
+- Bottom of the view: Back, the progress bar and slider, Next.
+- Look down: the sources, then the imagery credits; the Academy wordmark (lower left) and 3D emblem (lower right).
+- Upper right, above the filters: the state or province and country under you, with latitude and longitude.
+- Lower right, flying low and moving: a small 3D compass; the needle points the way you face, N stays on north.
+- The HUD turns with you only once your head turns past 60 degrees.
+
+On the globe, named data centers and power plants use the story's icons (Tabler glyphs, rendered from the web deck into `Assets/AtlasVR/Resources/AtlasIcons.png`), and the deck's power and data connections draw as glowing arcs with pulses (`layers/flows.json`, written by `_vr/export/flows.mjs`).
+
+Country and state borders come from Natural Earth (public domain), written by `_vr/export/borders.mjs` in the atlas app. The emblem mesh is baked from the Academy's glTF model by `_vr/export/bake_emblem.py` into `Assets/AtlasVR/Resources/AcademyEmblem.bytes`, so the project needs no glTF importer. Keyboard in the editor: WASD fly, Q/E zoom, J/L turn, H HUD, N north, arrows next/previous, T fly to.

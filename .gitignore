@@ -29,3 +29,6 @@ Thumbs.db
 /Assets/AtlasVR/Resources/AtlasVRLocal.json
 /Assets/AtlasVR/Resources/AtlasVRLocal.json.meta
 /Assets/StreamingAssets/AtlasPackage.incoming/
+
+# Unity build cache (Android Gradle/IL2CPP temp)
+/.utmp/

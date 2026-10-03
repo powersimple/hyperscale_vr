@@ -112,12 +112,70 @@ namespace AtlasVR
             colors.colorMultiplier = 1.4f;
             b.colors = colors;
             b.targetGraphic = img;
+            Raise(img.gameObject);
             if (onClick != null) b.onClick.AddListener(onClick);
             var t = Label("Text", img.transform, text, size, Text, FontStyles.Bold, TextAlignmentOptions.Center);
             Stretch(t.rectTransform, 8, 8, 4, 4);
             t.textWrappingMode = TextWrappingModes.NoWrap;
             t.overflowMode = TextOverflowModes.Ellipsis;
             return b;
+        }
+
+        /// A drop shadow and a light top edge, so a control reads as raised off its panel.
+        public static void Raise(GameObject go, float depth = 4f)
+        {
+            var sh = go.AddComponent<Shadow>();
+            sh.effectColor = new Color(0f, 0f, 0f, 0.6f);
+            sh.effectDistance = new Vector2(depth * 0.6f, -depth);
+            var rt = (RectTransform)go.transform;
+            var hi = Box("Highlight", rt, new Color(1f, 1f, 1f, 0.16f));
+            hi.raycastTarget = false;
+            hi.rectTransform.anchorMin = new Vector2(0, 1); hi.rectTransform.anchorMax = new Vector2(1, 1);
+            hi.rectTransform.pivot = new Vector2(0.5f, 1); hi.rectTransform.sizeDelta = new Vector2(-4, 2); hi.rectTransform.anchoredPosition = new Vector2(0, -1);
+            var le = hi.gameObject.AddComponent<LayoutElement>(); le.ignoreLayout = true;
+        }
+
+        static Material _overlayText;
+
+        /// Labels in the world draw over the terrain and the 3D tiles rather than sinking into them.
+        public static void OverText(TMPro.TMP_Text t)
+        {
+            if (t == null || t.fontSharedMaterial == null) return;
+            if (_overlayText == null)
+            {
+                _overlayText = new Material(t.fontSharedMaterial) { name = "Label (over terrain)" };
+                _overlayText.SetFloat("unity_GUIZTestMode", (float)UnityEngine.Rendering.CompareFunction.Always);
+                _overlayText.renderQueue = 2999;   // after the terrain, before the HUD panels
+            }
+            t.fontSharedMaterial = _overlayText;
+        }
+
+        static Material _slabMat;
+
+        /// A beveled solid backing behind a world canvas, so the panel reads as an object in space.
+        /// Call again after the canvas changes size.
+        public static void Slab(Canvas c, float depth = 22f, float bevel = 9f)
+        {
+            if (_slabMat == null)
+            {
+                _slabMat = new Material(Shader.Find("AtlasVR/Solid"));
+                _slabMat.SetColor("_Color", new Color(0.075f, 0.11f, 0.17f, 1f));
+            }
+            var rt = (RectTransform)c.transform;
+            var t = rt.Find("Slab");
+            if (t == null)
+            {
+                var go = new GameObject("Slab");
+                go.transform.SetParent(rt, false);
+                go.layer = rt.gameObject.layer;
+                go.AddComponent<MeshFilter>();
+                go.AddComponent<MeshRenderer>().sharedMaterial = _slabMat;
+                t = go.transform;
+            }
+            var r = rt.rect;
+            var mf = t.GetComponent<MeshFilter>();
+            if (mf.sharedMesh != null) UnityEngine.Object.Destroy(mf.sharedMesh);
+            mf.sharedMesh = Meshes.Slab(r.xMin - 6, r.yMin - 6, r.xMax + 6, r.yMax + 6, 2f, depth, bevel);
         }
 
         public static void SetText(UnityEngine.UI.Button b, string text)

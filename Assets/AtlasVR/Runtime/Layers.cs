@@ -95,6 +95,7 @@ namespace AtlasVR
             t.color = color;
             t.alignment = TextAlignmentOptions.Center;
             t.textWrappingMode = TextWrappingModes.NoWrap;
+            UI.OverText(t);
             go.transform.localScale = Vector3.one * scale;
             _labels.Add(t);
             _ecef.Add(Wgs84.ToEcef(lon, lat, 0));
@@ -150,7 +151,7 @@ namespace AtlasVR
 
             _ctyRim = new MarkerSet(discFine, true, 0) { sizeWS = 0.0062f };
             _ctyFill = new MarkerSet(discFine, true, 1) { sizeWS = 0.0062f, minLiftWS = 0.0024f };
-            _counts = new LabelPool(parent, "Data center counts") { heightWS = 0.0075f, liftWS = 0.004f };
+            _counts = new LabelPool(parent, "Data center counts") { heightWS = 0.006f, liftWS = 0.004f };
             var rr = new List<MarkerDef>(); var ff = new List<MarkerDef>();
             foreach (var c in d.countries)
             {
@@ -458,7 +459,7 @@ namespace AtlasVR
     public class SitesLayer : IPickable
     {
         readonly PkgSites _d;
-        readonly MarkerSet _rim, _core;
+        readonly IconSet _icons;
         readonly LabelPool _labels;
         readonly List<PkgSite> _shownDc = new List<PkgSite>();
         readonly List<PkgPlant> _shownPw = new List<PkgPlant>();
@@ -474,10 +475,8 @@ namespace AtlasVR
         public SitesLayer(PkgSites d, Transform parent)
         {
             _d = d;
-            var disc = Meshes.Disc(24);
-            _rim = new MarkerSet(disc, true, 6) { sizeWS = 0.005f };
-            _core = new MarkerSet(disc, true, 7) { sizeWS = 0.005f, minLiftWS = 0.0024f };
-            _labels = new LabelPool(parent, "Site labels") { heightWS = 0.0095f, liftWS = 0.012f };
+            _icons = new IconSet();   // the story's icons: server for data centers, the fuel's glyph for plants
+            _labels = new LabelPool(parent, "Site labels") { heightWS = 0.0062f, liftWS = 0.009f };
         }
 
         static Color FuelColor(string f)
@@ -508,7 +507,7 @@ namespace AtlasVR
             _shownDc.Clear(); _shownPw.Clear(); _labels.Clear(); Labeled.Clear();
             var hl = new HashSet<string>(show != null && show.highlight != null ? show.highlight : new string[0]);
             var lab = new HashSet<string>(show != null && show.labels != null ? show.labels : new string[0]);
-            var rc = new List<MarkerDef>(); var cc = new List<MarkerDef>();
+            var defs = new List<MarkerDef>(); var cells = new List<int>();
             if (show != null && _d != null)
             {
                 if (dataCentersOn) foreach (var s in _d.datacenters)
@@ -516,7 +515,9 @@ namespace AtlasVR
                     if (!Matches(show.dc, s.id, s.region, s.kind) && !hl.Contains(s.id)) continue;
                     _shownDc.Add(s);
                     bool h = hl.Contains(s.id);
-                    rc.Add(new MarkerDef(s.lon, s.lat, h ? 1.5f * 1.24f : 1.24f, h ? Highlight : Color.white)); cc.Add(new MarkerDef(s.lon, s.lat, h ? 1.5f : 1f, DcColor));
+                    // The web deck's sizing: 24 px plus up to 26 more with capacity; highlighted ones larger.
+                    float k = (24f + Mathf.Min(26f, Mathf.Sqrt(Mathf.Max(0f, (float)s.mw)) * 0.45f)) / 32f * (h ? 1.35f : 1f);
+                    defs.Add(new MarkerDef(s.lon, s.lat, k, Color.white)); cells.Add(IconSet.Cell(s.kind == "planned" ? "planned" : "dc"));
                     if (lab.Contains(s.id) || h) { _labels.Add(s.name, s.lon, s.lat, Color.white); Labeled.Add(s.id); }
                 }
                 if (plantsOn) foreach (var p in _d.plants)
@@ -525,18 +526,19 @@ namespace AtlasVR
                     if (!string.IsNullOrEmpty(p.fuel) && LegendFilter.IsOff("fuel:" + p.fuel)) continue;
                     _shownPw.Add(p);
                     bool h = hl.Contains(p.id);
-                    rc.Add(new MarkerDef(p.lon, p.lat, (h ? 1.4f : 0.9f) * 1.24f, h ? Highlight : new Color(0.05f, 0.05f, 0.05f, 1f))); cc.Add(new MarkerDef(p.lon, p.lat, h ? 1.4f : 0.9f, FuelColor(p.fuel)));
+                    float k = (24f + Mathf.Min(22f, Mathf.Sqrt(Mathf.Max(0f, (float)p.mw)) * 0.35f)) / 32f * (h ? 1.35f : 1f);
+                    defs.Add(new MarkerDef(p.lon, p.lat, k, Color.white)); cells.Add(IconSet.Cell(p.fuel));
                     if (lab.Contains(p.id) || h) { _labels.Add(p.name, p.lon, p.lat, Color.white); Labeled.Add(p.id); }
                 }
             }
-            _rim.Set(rc); _core.Set(cc);
-            _rim.visible = _core.visible = cc.Count > 0;
+            _icons.Set(defs, cells);
+            _icons.visible = defs.Count > 0;
             _labels.visible = true;
         }
 
         public void Draw(GlobeRig rig, Transform eye)
         {
-            _rim.Draw(rig); _core.Draw(rig);
+            _icons.Draw(rig);
             _labels.Update(rig, eye);
         }
 

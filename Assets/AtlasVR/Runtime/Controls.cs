@@ -6,7 +6,7 @@
 //   Right trigger the laser: select a marker (its data and sources show); pull on empty space to clear
 //   A             show or hide the HUD (selection and filters are kept)
 //   B             fly in to the selected marker (or wherever the laser points)
-//   Y             next slide            X   previous slide
+//   Y             turn to face north    X   previous slide (Next is on the HUD)
 //   Right grip    hold for turbo (4x)   Left grip   hold for precision (1/4x)
 //   Left stick click or Menu   recenter the HUD in front of you
 // Keyboard and gamepad mirror it in the editor and for a presenter at the PC.
@@ -21,7 +21,7 @@ namespace AtlasVR
     {
         public readonly InputAction rightStick, leftStick, trigger, aBtn, bBtn, xBtn, yBtn, menu, leftClick, rightGrip, leftGrip;
         public readonly InputAction rightAimPos, rightAimRot, rightGripPos, rightGripRot, rightHandPos, rightHandRot, leftPos, leftRot, leftHandPos, leftHandRot;
-        public readonly InputAction kbMove, kbClimb, kbYaw, next, prev, blank, spectator, toggleHud, teleport, select;
+        public readonly InputAction kbMove, kbClimb, kbYaw, next, prev, blank, spectator, toggleHud, teleport, select, north;
 
         public Controls()
         {
@@ -71,6 +71,7 @@ namespace AtlasVR
             toggleHud = Button("Toggle HUD", "<Keyboard>/h", "<Gamepad>/buttonNorth");
             teleport = Button("Teleport", "<Keyboard>/t", "<Gamepad>/buttonEast");
             select = Button("Select", "<Keyboard>/enter");
+            north = Button("North", "<Keyboard>/n");
 
             foreach (var a in All()) a.Enable();
         }
@@ -91,7 +92,7 @@ namespace AtlasVR
 
         InputAction[] All()
         {
-            return new[] { rightStick, leftStick, trigger, aBtn, bBtn, xBtn, yBtn, menu, leftClick, rightGrip, leftGrip, rightAimPos, rightAimRot, rightGripPos, rightGripRot, rightHandPos, rightHandRot, leftPos, leftRot, leftHandPos, leftHandRot, kbMove, kbClimb, kbYaw, next, prev, blank, spectator, toggleHud, teleport, select };
+            return new[] { rightStick, leftStick, trigger, aBtn, bBtn, xBtn, yBtn, menu, leftClick, rightGrip, leftGrip, rightAimPos, rightAimRot, rightGripPos, rightGripRot, rightHandPos, rightHandRot, leftPos, leftRot, leftHandPos, leftHandRot, kbMove, kbClimb, kbYaw, next, prev, blank, spectator, toggleHud, teleport, select, north };
         }
 
         public static Vector2 Dead(Vector2 v, float dz = 0.15f)

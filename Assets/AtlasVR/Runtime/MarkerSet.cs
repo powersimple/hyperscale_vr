@@ -41,7 +41,15 @@ namespace AtlasVR
             _mesh = mesh;
             _mat = new Material(Shader.Find(shader));
             _mat.enableInstancing = true;
-            if (opaque)
+            if (shader == "AtlasVR/Gem")
+            {
+                // Gems are see-through: blended, after the cables and borders, drawn in set order.
+                _mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                _mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                _mat.SetFloat("_ZWrite", 0f);
+                _mat.renderQueue = 2460 + sortingOffset;   // after ribbons and flows, before the place labels (2999)
+            }
+            else if (opaque)
             {
                 _mat.SetFloat("_SrcBlend", (float)BlendMode.One);
                 _mat.SetFloat("_DstBlend", (float)BlendMode.Zero);

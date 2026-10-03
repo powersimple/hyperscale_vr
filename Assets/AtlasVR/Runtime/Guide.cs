@@ -21,8 +21,8 @@ namespace AtlasVR
             _root = new GameObject("Title over the globe").transform;
             var bold = Raleway("Raleway-Bold");
             var medium = Raleway("Raleway-Medium");
-            _title = Make("Title", title, bold, 10f, new Vector3(0, 0.95f, 0));
-            _sub = Make("Subtitle", subtitle, medium ?? bold, 7.5f, Vector3.zero);   // 75% of the title
+            _title = Make("Title", title, bold, 14f, new Vector3(0, 1.3f, 0));
+            _sub = Make("Subtitle", subtitle, medium ?? bold, 10.5f, Vector3.zero);   // 75% of the title
             _root.gameObject.SetActive(false);
         }
 
@@ -47,14 +47,15 @@ namespace AtlasVR
             t.textWrappingMode = TextWrappingModes.NoWrap;
             t.color = Color.white;
             t.rectTransform.pivot = new Vector2(0.5f, 0f);    // the text's bottom on its transform
-            t.rectTransform.sizeDelta = new Vector2(40f, 0f);
+            t.rectTransform.sizeDelta = new Vector2(60f, 0f);
             return t;
         }
 
         public void Update(GlobeRig rig, Transform eye)
         {
-            bool want = rig.mode == ViewMode.Flight && rig.OrbitBlend > 0.6f;
-            _shown = Mathf.MoveTowards(_shown, want ? 1f : 0f, Time.unscaledDeltaTime * 1.5f);
+            // Full zoomed right out; it fades as you zoom in, gone before it would sink into the Earth.
+            float want = OrbitMenu.Fade(rig);
+            _shown = Mathf.MoveTowards(_shown, want, Time.unscaledDeltaTime * 2.5f);
             bool on = _shown > 0.001f;
             if (_root.gameObject.activeSelf != on) _root.gameObject.SetActive(on);
             if (!on) return;
@@ -87,10 +88,30 @@ namespace AtlasVR
             _left.gameObject.SetActive(false); _right.gameObject.SetActive(false);
         }
 
-        public void Update()
+        /// At the Earth's southwest and southeast, at its depth, facing you; fading as you zoom in.
+        public void Update(GlobeRig rig, Transform eye)
         {
-            if (visible && _follow != null) _root.SetPositionAndRotation(_follow.position, _follow.rotation);
-            if (_left.gameObject.activeSelf != visible) { _left.gameObject.SetActive(visible); _right.gameObject.SetActive(visible); }
+            float a = visible ? OrbitMenu.Fade(rig) : 0f;
+            bool on = a > 0.02f;
+            if (_left.gameObject.activeSelf != on) { _left.gameObject.SetActive(on); _right.gameObject.SetActive(on); }
+            if (!on || rig == null || eye == null) return;
+            Vector3 c = rig.BallCenter;
+            Vector3 toEye = eye.position - c; toEye.y = 0;
+            if (toEye.sqrMagnitude < 1e-6f) toEye = -Vector3.forward;
+            _root.SetPositionAndRotation(c, Quaternion.LookRotation(-toEye.normalized, Vector3.up));
+            _root.localScale = Vector3.one * rig.BallRadius;
+            Set(_left, -1.62f, a); Set(_right, 1.62f, a);
+        }
+
+        static void Set(Canvas c, float x, float alpha)
+        {
+            var t = c.transform;
+            t.localPosition = new Vector3(x, -1.55f, 0);
+            t.localRotation = Quaternion.identity;
+            t.localScale = Vector3.one * (0.95f / 600f);
+            var g = c.GetComponent<CanvasGroup>();
+            if (g == null) g = c.gameObject.AddComponent<CanvasGroup>();
+            g.alpha = alpha;
         }
 
         // One controller: its face toward the Earth, the labels on the outer side.

@@ -151,6 +151,7 @@ namespace AtlasVR
             _fade.transform.localScale = Vector3.one * 0.3f;
             _fMat = new Material(Shader.Find("AtlasVR/Fade"));
             _fade.GetComponent<MeshRenderer>().sharedMaterial = _fMat;
+            _fade.GetComponent<MeshRenderer>().sortingOrder = 1000;   // above every canvas, so dark means dark
             _fade.SetActive(false);
         }
 
@@ -173,6 +174,21 @@ namespace AtlasVR
         }
 
         public void FadeTo(float a) { _fadeTarget = Mathf.Clamp01(a); }
+
+        /// While the app has lost focus (the Meta button, the Quest menu), the view goes dark at once.
+        /// The headset keeps turning the last frame with your head; a dark view has nothing to drag.
+        /// Released, it fades back in with the next frames.
+        public void Hold(bool on)
+        {
+            if (on == _held) return;
+            _held = on;
+            if (!on) return;
+            _fadeNow = 1f;
+            _fade.SetActive(true);
+            _fMat.SetColor("_Color", new Color(0, 0, 0, 1f));
+            if (_vignette.activeSelf) _vignette.SetActive(false);
+        }
+        bool _held;
 
         // One triangle that covers the whole view; the shader places it in clip space.
         static Mesh FullScreenTriangle()

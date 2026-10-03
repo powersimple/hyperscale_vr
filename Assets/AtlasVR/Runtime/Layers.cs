@@ -186,9 +186,38 @@ namespace AtlasVR
                 _aiIndex.Add(i);
             }
             _aiGems.Set(km); _buildGems.Set(bm);
+            CompanyFocus.Changed += Recolor;
         }
 
         public void SetShow(PkgComputeShow s) { _show = s; }
+
+        // On a players or clouds slide, each AI site of a company the slide names takes that
+        // company's color (the legend's dot); the rest keep the ruby of AI compute.
+        readonly Dictionary<string, Color> _companies = new Dictionary<string, Color>();
+
+        public void SetLegend(PkgLegendItem[] legend)
+        {
+            _companies.Clear();
+            if (legend != null)
+                foreach (var it in legend)
+                    if (!string.IsNullOrEmpty(it.company) && !_companies.ContainsKey(it.company)) _companies[it.company] = Hex.Color(it.color, 1f);
+            Recolor();
+        }
+
+        void Recolor()
+        {
+            for (int j = 0; j < _aiIndex.Count; j++) _aiGems.SetColor(j, ColorFor(_d.ai[_aiIndex[j]], Legend.Ruby));
+            for (int j = 0; j < _buildIndex.Count; j++) _buildGems.SetColor(j, ColorFor(_d.ai[_buildIndex[j]], Legend.Topaz));
+            _aiGems.ApplyColors(); _buildGems.ApplyColors();
+        }
+
+        Color ColorFor(PkgAi s, Color dflt)
+        {
+            Color c;
+            string co = s.company ?? "";
+            if (co.Length > 0 && _companies.TryGetValue(co, out c)) c.a = 0.95f; else c = dflt;
+            return CompanyFocus.Apply(c, co);
+        }
 
         public void Draw(GlobeRig rig, Transform eye)
         {
@@ -306,74 +335,92 @@ namespace AtlasVR
         readonly Mesh _mesh;
         readonly Material _mat;
         readonly MarkerSet _landRim, _landCore;
-        readonly List<int> _start = new List<int>(), _end = new List<int>(); // vertex range per cable
         readonly List<Vector3[]> _pickPts = new List<Vector3[]>();             // coarse ECEF points per cable, for picking
-        Color[] _colors;
-        Vector2[] _uvs;
         PkgTeleShow _show;
         const double StepDeg = 0.5;
+
+        // Overland telecom lines (OpenStreetMap), drawn as thinner amber ribbons.
+        Mesh _landMesh;
+        Material _landMat;
+        public bool HasLand { get { return _landMesh != null; } }
+        static readonly Color LandColor = new Color(1f, 0.66f, 0.3f, 0.85f);
+
+        public CableLayer(PkgTeleLayer d, PkgLandLines land = null) : this(d)
+        {
+            if (land == null || land.lines == null || land.lines.Length == 0) return;
+            var verts = new List<Vector3>(); var lows = new List<Vector3>(); var norms = new List<Vector3>(); var uvs = new List<Vector2>(); var cols = new List<Color>(); var tris = new List<int>();
+            foreach (var ln in land.lines) AddRibbon(ln.lonlat, LandColor, 0.7f, verts, lows, norms, uvs, cols, tris);
+            if (verts.Count == 0) return;
+            _landMesh = new Mesh { name = "Land telecom lines", indexFormat = IndexFormat.UInt32 };
+            _landMesh.SetVertices(verts); _landMesh.SetNormals(norms); _landMesh.SetUVs(0, uvs); _landMesh.SetUVs(1, lows); _landMesh.SetColors(cols);
+            _landMesh.SetTriangles(tris, 0);
+            _landMesh.bounds = new Bounds(Vector3.zero, Vector3.one * 2.0e7f);
+            _landMat = new Material(Shader.Find("AtlasVR/Ribbon")) { renderQueue = 2433 };
+        }
+
+        /// One polyline as a ribbon: densified along great circles, two vertices per point.
+        static void AddRibbon(double[] lonlat, Color col, float width, List<Vector3> verts, List<Vector3> lows, List<Vector3> norms, List<Vector2> uvs, List<Color> cols, List<int> tris)
+        {
+            if (lonlat == null || lonlat.Length < 4) return;
+            var pts = new List<D3>();
+            int n = lonlat.Length / 2;
+            for (int i = 0; i < n; i++)
+            {
+                double lon0 = lonlat[i * 2], lat0 = lonlat[i * 2 + 1];
+                if (i == 0) { pts.Add(Wgs84.ToEcef(lon0, lat0, 0)); continue; }
+                double lonP = lonlat[(i - 1) * 2], latP = lonlat[(i - 1) * 2 + 1];
+                double ang = Wgs84.AngleDeg(lonP, latP, lon0, lat0);
+                if (ang < 1e-7) continue;
+                int steps = Math.Max(1, (int)Math.Ceiling(ang / StepDeg));
+                for (int k = 1; k <= steps; k++)
+                {
+                    double lo, la;
+                    Wgs84.Slerp(lonP, latP, lon0, lat0, (double)k / steps, out lo, out la);
+                    pts.Add(Wgs84.ToEcef(lo, la, 0));
+                }
+            }
+            if (pts.Count < 2) return;
+            int baseV = verts.Count;
+            for (int i = 0; i < pts.Count; i++)
+            {
+                D3 prev = pts[Math.Max(0, i - 1)], next = pts[Math.Min(pts.Count - 1, i + 1)];
+                D3 side = D3.Cross(pts[i].Normalized, (next - prev).Normalized).Normalized;
+                Vector3 p, plo, sv = side.ToVector3();
+                Wgs84.Split(pts[i], out p, out plo);
+                verts.Add(p); lows.Add(plo); norms.Add(sv); uvs.Add(new Vector2(-1, width)); cols.Add(col);
+                verts.Add(p); lows.Add(plo); norms.Add(sv); uvs.Add(new Vector2(1, width)); cols.Add(col);
+                if (i > 0)
+                {
+                    int a = baseV + (i - 1) * 2;
+                    tris.Add(a); tris.Add(a + 1); tris.Add(a + 2);
+                    tris.Add(a + 1); tris.Add(a + 3); tris.Add(a + 2);
+                }
+            }
+        }
 
         public CableLayer(PkgTeleLayer d)
         {
             _d = d;
+            // One static ribbon mesh for every system, the way the borders draw (which always
+            // showed); emphasis comes from a second, small mesh of the highlighted systems and a
+            // tint on the base, so no mesh is rewritten while the app runs.
             var verts = new List<Vector3>(); var lows = new List<Vector3>(); var norms = new List<Vector3>(); var uvs = new List<Vector2>(); var cols = new List<Color>(); var tris = new List<int>();
             foreach (var c in d.cables)
             {
-                int start = verts.Count;
                 Color col = Hex.Color(c.color, 0.9f);
                 var pick = new List<Vector3>();
-                foreach (var ln in c.lines)
-                {
-                    if (ln.lonlat == null || ln.lonlat.Length < 4) continue;
-                    // Densify along great circles so long spans follow the surface.
-                    var pts = new List<D3>();
-                    int n = ln.lonlat.Length / 2;
-                    for (int i = 0; i < n; i++)
+                if (c.lines != null)
+                    foreach (var ln in c.lines)
                     {
-                        double lon0 = ln.lonlat[i * 2], lat0 = ln.lonlat[i * 2 + 1];
-                        if (i == 0) { pts.Add(Wgs84.ToEcef(lon0, lat0, 0)); pick.Add(pts[0].ToVector3()); continue; }
-                        double lonP = ln.lonlat[(i - 1) * 2], latP = ln.lonlat[(i - 1) * 2 + 1];
-                        double ang = Wgs84.AngleDeg(lonP, latP, lon0, lat0);
-                        int steps = Math.Max(1, (int)Math.Ceiling(ang / StepDeg));
-                        if (ang < 1e-7) continue; // repeated point: no length, no tangent
-                        for (int k = 1; k <= steps; k++)
-                        {
-                            double lo, la;
-                            Wgs84.Slerp(lonP, latP, lon0, lat0, (double)k / steps, out lo, out la);
-                            pts.Add(Wgs84.ToEcef(lo, la, 0));
-                        }
-                        pick.Add(Wgs84.ToEcef(lon0, lat0, 0).ToVector3());
+                        if (ln.lonlat == null || ln.lonlat.Length < 4) continue;
+                        for (int i = 0; i < ln.lonlat.Length / 2; i++) pick.Add(Wgs84.ToEcef(ln.lonlat[i * 2], ln.lonlat[i * 2 + 1], 0).ToVector3());
+                        AddRibbon(ln.lonlat, col, 1f, verts, lows, norms, uvs, cols, tris);
                     }
-                    if (pts.Count < 2) continue;
-                    int baseV = verts.Count;
-                    for (int i = 0; i < pts.Count; i++)
-                    {
-                        D3 prev = pts[Math.Max(0, i - 1)], next = pts[Math.Min(pts.Count - 1, i + 1)];
-                        D3 tan = (next - prev).Normalized;
-                        D3 side = D3.Cross(pts[i].Normalized, tan).Normalized;
-                        Vector3 p, plo, sv = side.ToVector3();
-                        Wgs84.Split(pts[i], out p, out plo);
-                        verts.Add(p); lows.Add(plo); norms.Add(sv); uvs.Add(new Vector2(-1, 1)); cols.Add(col);
-                        verts.Add(p); lows.Add(plo); norms.Add(sv); uvs.Add(new Vector2(1, 1)); cols.Add(col);
-                        if (i > 0)
-                        {
-                            int a = baseV + (i - 1) * 2;
-                            tris.Add(a); tris.Add(a + 1); tris.Add(a + 2);
-                            tris.Add(a + 1); tris.Add(a + 3); tris.Add(a + 2);
-                        }
-                    }
-                }
-                _start.Add(start); _end.Add(verts.Count);
                 _pickPts.Add(pick.ToArray());
             }
-            _mesh = new Mesh { name = "TeleGeography cables", indexFormat = IndexFormat.UInt32 };
-            _mesh.SetVertices(verts); _mesh.SetNormals(norms); _mesh.SetUVs(0, uvs); _mesh.SetUVs(1, lows); _mesh.SetColors(cols);
-            _mesh.SetTriangles(tris, 0);
-            _mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 2.0e7f);
-            _colors = cols.ToArray();
-            _uvs = uvs.ToArray();
-            _mat = new Material(Shader.Find("AtlasVR/Ribbon"));
-            _mat.renderQueue = 2440; // before the opaque markers, so markers sit on top of the cables
+            _mesh = MakeMesh("TeleGeography cables", verts, lows, norms, uvs, cols, tris);
+            _mat = new Material(Shader.Find("AtlasVR/Ribbon")) { renderQueue = 2431 };   // just after the country borders
+            _hiMat = new Material(Shader.Find("AtlasVR/Ribbon")) { renderQueue = 2432 };
 
             // Landing points: small aquamarine spheres.
             _landRim = new MarkerSet(Meshes.Ball(), true, 4, "AtlasVR/Gem") { sizeWS = 0.0022f, minLiftWS = 0.0013f };
@@ -383,26 +430,41 @@ namespace AtlasVR
             _landRim.Set(a1); _landCore.Set(new List<MarkerDef>());
         }
 
+        static Mesh MakeMesh(string name, List<Vector3> verts, List<Vector3> lows, List<Vector3> norms, List<Vector2> uvs, List<Color> cols, List<int> tris)
+        {
+            if (verts.Count == 0) return null;
+            var m = new Mesh { name = name, indexFormat = IndexFormat.UInt32 };
+            m.SetVertices(verts); m.SetNormals(norms); m.SetUVs(0, uvs); m.SetUVs(1, lows); m.SetColors(cols);
+            m.SetTriangles(tris, 0);
+            m.bounds = new Bounds(Vector3.zero, Vector3.one * 2.0e7f);
+            return m;
+        }
+
+        Mesh _hiMesh;
+        readonly Material _hiMat;
+        string _hiKey = "";
+        bool _anyHighlight;
+
         public void SetShow(PkgTeleShow s)
         {
             _show = s;
             if (s == null || !s.on) return;
-            var hi = new HashSet<string>(s.highlight ?? new string[0]);
-            bool any = hi.Count > 0;
-            for (int c = 0; c < _d.cables.Length; c++)
+            var hi = s.highlight ?? new string[0];
+            string key = string.Join("|", hi);
+            if (key == _hiKey) return;
+            _hiKey = key;
+            _anyHighlight = hi.Length > 0;
+            if (_hiMesh != null) { UnityEngine.Object.Destroy(_hiMesh); _hiMesh = null; }
+            if (!_anyHighlight) return;
+            var set = new HashSet<string>(hi);
+            var verts = new List<Vector3>(); var lows = new List<Vector3>(); var norms = new List<Vector3>(); var uvs = new List<Vector2>(); var cols = new List<Color>(); var tris = new List<int>();
+            foreach (var c in _d.cables)
             {
-                bool on = !any || hi.Contains(_d.cables[c].id);
-                float alpha = any ? (on ? 1f : 0.18f) : 0.9f;
-                float width = any ? (on ? 2.0f : 0.62f) : 1f;
-                Color baseCol = Hex.Color(_d.cables[c].color, alpha);
-                for (int v = _start[c]; v < _end[c]; v++)
-                {
-                    _colors[v] = baseCol;
-                    _uvs[v] = new Vector2(_uvs[v].x, width);
-                }
+                if (!set.Contains(c.id) || c.lines == null) continue;
+                Color col = Hex.Color(c.color, 1f);
+                foreach (var ln in c.lines) AddRibbon(ln.lonlat, col, 2f, verts, lows, norms, uvs, cols, tris);
             }
-            _mesh.colors = _colors;
-            _mesh.uv = _uvs;
+            _hiMesh = MakeMesh("Highlighted cables", verts, lows, norms, uvs, cols, tris);
         }
 
         public void Draw(GlobeRig rig)
@@ -412,10 +474,26 @@ namespace AtlasVR
             {
                 _mat.SetFloat("_WidthWS", rig.mode == ViewMode.Flight ? 0.0016f : Mathf.Clamp(0.0011f * Mathf.Pow((float)(2.0e7 / rig.ViewHeight), 0.25f), 0.0009f, 0.003f));
                 _mat.SetFloat("_LiftWS", 0.0015f);
-                var rp = new RenderParams(_mat);
-                rp.worldBounds = new Bounds(rig.BallCenter, Vector3.one * Mathf.Max(10f, rig.BallRadius * 3f));
-                rp.shadowCastingMode = ShadowCastingMode.Off;
-                Graphics.RenderMesh(rp, _mesh, 0, Matrix4x4.identity);
+                _mat.SetColor("_Tint", new Color(1f, 1f, 1f, _anyHighlight ? 0.2f : 1f));
+                var bounds = new Bounds(rig.BallCenter, Vector3.one * Mathf.Max(10f, rig.BallRadius * 3f));
+                if (_mesh != null) Graphics.RenderMesh(new RenderParams(_mat) { worldBounds = bounds, shadowCastingMode = ShadowCastingMode.Off }, _mesh, 0, Matrix4x4.identity);
+                if (_hiMesh != null)
+                {
+                    _hiMat.SetFloat("_WidthWS", _mat.GetFloat("_WidthWS"));
+                    _hiMat.SetFloat("_LiftWS", 0.0016f);
+                    _hiMat.SetColor("_Tint", Color.white);
+                    Graphics.RenderMesh(new RenderParams(_hiMat) { worldBounds = bounds, shadowCastingMode = ShadowCastingMode.Off }, _hiMesh, 0, Matrix4x4.identity);
+                }
+            }
+            if (on && _landMesh != null && !LegendFilter.IsOff("tc:land"))
+            {
+                _landMat.SetFloat("_WidthWS", rig.mode == ViewMode.Flight ? 0.0016f : Mathf.Clamp(0.0011f * Mathf.Pow((float)(2.0e7 / rig.ViewHeight), 0.25f), 0.0009f, 0.003f));
+                _landMat.SetFloat("_LiftWS", 0.0015f);
+                _landMat.SetColor("_Tint", Color.white);
+                var lp = new RenderParams(_landMat);
+                lp.worldBounds = new Bounds(rig.BallCenter, Vector3.one * Mathf.Max(10f, rig.BallRadius * 3f));
+                lp.shadowCastingMode = ShadowCastingMode.Off;
+                Graphics.RenderMesh(lp, _landMesh, 0, Matrix4x4.identity);
             }
             _landRim.visible = _landCore.visible = on && _show.landings && !LegendFilter.IsOff("tc:landings");
             LandingsVisible = _landRim.visible;

@@ -1,4 +1,4 @@
-// The package the export script writes (_vr/export/export_vr_package.mjs in the atlas app),
+// The package the export script writes (_build/vr/export_vr_package.mjs in the Hyperscale site),
 // read with JsonUtility. Field names match the package JSON exactly.
 using System;
 
@@ -31,7 +31,19 @@ namespace AtlasVR
         public string entity;
         public string[] explore;
         public string chart;
+        public PkgFilters filters;         // the layers this slide turns on (set by the export)
+        public PkgLegendItem[] legend;     // the companies this slide names, in their colors
+        public PkgLogo[] logos;            // logo cards standing over their places
     }
+    [Serializable]
+    public class PkgFilters
+    {
+        public bool set;
+        public bool dc, ai, cables, landings, land, power, sites, footprints;
+        public string[] providers;
+    }
+    [Serializable] public class PkgLegendItem { public string key, name, color, image, company; }
+    [Serializable] public class PkgLogo { public string key, text, color, image; public double lon, lat; }
     [Serializable] public class PkgSegment { public string text, claim; }
     [Serializable] public class PkgClaim { public string id, text; public string[] refs; }
     [Serializable] public class PkgStat { public string value, label; public string[] refs; }
@@ -69,6 +81,7 @@ namespace AtlasVR
         public string[] members;
         public string date;
         public string[] refs;
+        public string company;
     }
     [Serializable] public class PkgColors { public string dc, ai, countryFill; }
 
@@ -82,6 +95,12 @@ namespace AtlasVR
     [Serializable] public class PkgSlideFlows { public string id; public string[] flows; }
     [Serializable] public class PkgRegion { public string name, country, type; public double[] bbox; public PkgLine[] rings; }
     [Serializable] public class PkgLanding { public double lon, lat; public string name; }
+
+    [Serializable] public class PkgFootprints { public PkgProvider[] providers; public PkgFpSite[] sites; }
+    [Serializable] public class PkgProvider { public string key, label, @short, color, image, company; public string[] refs; }
+    [Serializable] public class PkgFpSite { public string provider, kind, name, city, cc, status; public double lat, lon; public int azs, year; public bool approx; }
+    [Serializable] public class PkgLandLines { public PkgLandLine[] lines; public string credit; }
+    [Serializable] public class PkgLandLine { public string name, op; public double[] lonlat; }
 
     [Serializable] public class PkgSites { public PkgSite[] datacenters; public PkgPlant[] plants; }
     [Serializable] public class PkgSite { public string id, name; public double lon, lat; public string kind, region; public double mw; public bool approx; public string[] refs; }

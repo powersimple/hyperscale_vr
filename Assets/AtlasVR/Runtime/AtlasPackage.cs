@@ -24,11 +24,14 @@ namespace AtlasVR
         public PkgBorders borders;
         public PkgRegions regions;
         public PkgFlows flows;
+        public PkgFootprints footprints;
+        public PkgLandLines land;
         public string error;
 
         readonly Dictionary<string, PkgSlide> _slides = new Dictionary<string, PkgSlide>();
         readonly Dictionary<string, PkgRef> _refs = new Dictionary<string, PkgRef>();
         readonly Dictionary<string, Sprite> _sprites = new Dictionary<string, Sprite>();
+        readonly HashSet<string> _loadingSprites = new HashSet<string>();
 
         public PkgSlide Slide(string id) { PkgSlide s; return id != null && _slides.TryGetValue(id, out s) ? s : null; }
         public PkgRef Ref(string id) { PkgRef r; return id != null && _refs.TryGetValue(id, out r) ? r : null; }
@@ -102,6 +105,8 @@ namespace AtlasVR
             yield return ReadText("layers/borders.json", optional); if (txt != null) pkg.borders = JsonUtility.FromJson<PkgBorders>(txt); txt = null;
             yield return ReadText("layers/regions.json", optional); if (txt != null) pkg.regions = JsonUtility.FromJson<PkgRegions>(txt); txt = null;
             yield return ReadText("layers/flows.json", optional); if (txt != null) pkg.flows = JsonUtility.FromJson<PkgFlows>(txt); txt = null;
+            yield return ReadText("layers/footprints.json", optional); if (txt != null) pkg.footprints = JsonUtility.FromJson<PkgFootprints>(txt); txt = null;
+            yield return ReadText("layers/landlines.json", optional); if (txt != null) pkg.land = JsonUtility.FromJson<PkgLandLines>(txt); txt = null;
 
             if (pkg.slides != null) foreach (var s in pkg.slides) pkg._slides[s.id] = s;
             if (pkg.refs != null) foreach (var r in pkg.refs) pkg._refs[r.id] = r;
@@ -115,15 +120,18 @@ namespace AtlasVR
         {
             if (string.IsNullOrEmpty(src)) { done(null); yield break; }
             Sprite sp;
+            while (_loadingSprites.Contains(src)) yield return null;   // one load per image, however many ask
             if (_sprites.TryGetValue(src, out sp)) { done(sp); yield break; }
+            _loadingSprites.Add(src);
             byte[] bytes = null;
             yield return ReadBytes(src, (b, e) => bytes = b);
-            if (bytes == null) { done(null); yield break; }
+            if (bytes == null) { _loadingSprites.Remove(src); done(null); yield break; }
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             tex.LoadImage(bytes);
             tex.wrapMode = TextureWrapMode.Clamp;
             sp = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 1000f);
             _sprites[src] = sp;
+            _loadingSprites.Remove(src);
             done(sp);
         }
 

@@ -41,7 +41,7 @@ namespace AtlasVR
         public string subtitleOverGlobe = "Public Media and the Immersive Economy";
         [Tooltip("Speed multiplier while the left grip is held.")]
         public float precision = 0.25f;
-        public Comfort.Mode comfortMode = Comfort.Mode.Vignette;
+        public Comfort.Mode comfortMode = Comfort.Mode.Off;
         [Tooltip("A light hum in the right controller while flying fast.")]
         public bool engineRumble = true;
 
@@ -49,6 +49,9 @@ namespace AtlasVR
         public bool photorealCloseUps = true;
         [Range(0.7f, 1.4f)] public float renderScale = 1.0f;
         public float questRefreshRate = 90f;
+
+        /// The build shown under the Academy logo when zoomed all the way out. Raise it with each build.
+        public const string BuildVersion = "Build 10";
 
         AtlasPackage _pkg;
         GlobeRig _rig;
@@ -75,6 +78,10 @@ namespace AtlasVR
         OrbitTitle _orbitTitle;
         ControlsGuide _guide;
         OrbitMenu _menu;
+        readonly MixedReality _mr = new MixedReality();
+        readonly Speech _speech = new Speech();
+        bool _oneHand, _speak;
+        string _speechProblemShown;
         FocusLabels _focus;
         PhotoCapture _photo;
         float _placeNext;
@@ -124,7 +131,8 @@ namespace AtlasVR
             UI.EnsureEventSystem();
 
             _in = new Controls();
-            _comfort = new Comfort(_eye) { mode = comfortMode };
+            // The comfort vignette stays off (October 2026); the travel fade remains a choice.
+            _comfort = new Comfort(_eye) { mode = comfortMode == Comfort.Mode.Fade ? Comfort.Mode.Fade : Comfort.Mode.Off };
             _laser = new Laser(transform);
 
             yield return AtlasPackage.Load(p => _pkg = p);
@@ -157,6 +165,7 @@ namespace AtlasVR
             _credits = new VRCredits(null, _cam, "Data centers: PeeringDB. AI compute: Epoch AI. Submarine cables: TeleGeography (CC BY-NC-SA 3.0).");
             _hud.PlaceCredits(_credits.canvas);
             _branding = new Branding(_hud.root, _cam);
+            _branding.SetVersion("Public Hyperscale   ·   " + BuildVersion + "   ·   data " + (_pkg.manifest != null ? _pkg.manifest.package : "unknown"));
             _compass = new Compass(_hud.root, _hud.compassAnchor);
             _orbitTitle = new OrbitTitle(_pkg.deck != null ? _pkg.deck.title : "", subtitleOverGlobe);
             _guide = new ControlsGuide(_hud.root, _cam);
@@ -275,6 +284,7 @@ namespace AtlasVR
             _hud.SetLegend(_slide.legend);
             _filters.FromSlide(_slide, _flows.HasFlows(_slide.id));   // raises Changed, which applies the layers
 
+            SpeakSlide();
             var c = _slide.camera;
             if (HasCamera(c)) Fly(c, instant && !introDescent, CloseIn(_slide));
             Haptics.Pulse(true, 0.15f, 0.04f);
@@ -321,10 +331,42 @@ namespace AtlasVR
             _rig.SetSlideLayers(_filters.On("night") ? 1f : 0f, s != null && s.photoreal && _filters.On("photoreal"), false);
             _rig.photorealCloseUps = _filters.On("photoreal");
             _proximity.enabled = _filters.On("labels");
+            ApplyAccess();
+            if (_filters.On("mr") != _mr.On)
+            {
+                if (!_mr.Set(_filters.On("mr"), _cam)) { _filters.Set("mr", false); _hud.SetNotice(_mr.Problem ?? "Passthrough is not available", 8f); }
+                _rig.Passthrough = _mr.On;
+            }
             bool slideFlows = _slide != null && _flows.HasFlows(_slide.id);
             _flows.SetShow(_slide != null ? _slide.id : null, _filters.On("flows"), !slideFlows);   // the slide's own arcs, or all of them when the viewer turns connections on
             _borders.countriesOn = _filters.On("borders") && _filters.On("borders.countries");
             _borders.statesOn = _filters.On("borders") && _filters.On("borders.states");
+        }
+
+        /// Comfort and access, from the settings group in the filters.
+        void ApplyAccess()
+        {
+            snapTurn = _filters.On("access.snap");
+            _comfort.mode = _filters.On("access.fade") ? Comfort.Mode.Fade : Comfort.Mode.Off;
+            Shader.SetGlobalFloat("_AtlasStill", _filters.On("access.still") ? 1f : 0f);
+            _hud.SetAccess(_filters.On("access.large"), _filters.On("access.contrast"));
+            _oneHand = _filters.On("access.onehand");
+            bool speak = _filters.On("access.speak");
+            if (speak != _speak)
+            {
+                _speak = speak;
+                if (speak) SpeakSlide(); else _speech.Stop();
+            }
+        }
+
+        void SpeakSlide()
+        {
+            if (!_speak || _slide == null) return;
+            var sb = new System.Text.StringBuilder();
+            if (!string.IsNullOrEmpty(_slide.title)) sb.Append(_slide.title).Append(". ");
+            if (!string.IsNullOrEmpty(_slide.subtitle)) sb.Append(_slide.subtitle).Append(". ");
+            if (!string.IsNullOrEmpty(_slide.body)) sb.Append(_slide.body);
+            _speech.Say(sb.ToString());
         }
 
         void Next()
@@ -523,6 +565,9 @@ namespace AtlasVR
             // Sticks.
             Vector2 r = Controls.Dead(_in.rightStick.ReadValue<Vector2>()) + _in.kbMove.ReadValue<Vector2>();
             Vector2 l = Controls.Dead(_in.leftStick.ReadValue<Vector2>());
+            // One hand: the right stick zooms (forward and back) and turns (left and right); B flies to
+            // places and the display's arrows change slides, so the left controller is never needed.
+            if (_oneHand) { l = r; r = Vector2.zero; }
             l.y -= _in.kbClimb.ReadValue<float>();
             l.x += _in.kbYaw.ReadValue<float>();
             r = Vector2.ClampMagnitude(r, 1f); l.x = Mathf.Clamp(l.x, -1f, 1f); l.y = Mathf.Clamp(l.y, -1f, 1f);
@@ -710,8 +755,10 @@ namespace AtlasVR
             if (_footprints != null) _footprints.Draw(_rig);
             _logos.Update(_rig, _eye, _filters.On("ai") || _filters.On("footprints") || _filters.On("dc"));
             if (Paused) return;   // the Quest menu is open: hold everything else still
+            LabelFocus.Set(_selected, _hover != null && _selected != null && _hover.title == _selected.title ? null : _hover);
             _proximity.Update(_rig, _eye, _compute, _cables, _sites);
             _hud.Follow(_eye);
+            _branding.Follow(_hud.root, OrbitMenu.Fade(_rig));
             _credits.Tick();
             _branding.Update();
             bool below = _rig.mode == ViewMode.Flight && _rig.ViewHeight < GlobeRig.OrbitFrom;
@@ -727,6 +774,9 @@ namespace AtlasVR
             _hud.SetLoading(_rig.Loading ? _rig.LoadPercent : -1f);
             if (_rig.ImageryProblem != null && _rig.ImageryProblem != _noticeShown) { _noticeShown = _rig.ImageryProblem; _hud.SetNotice(_noticeShown, 20f); }
             _spectator.Tick(_cam);
+            if (_speech.Problem != null && _speech.Problem != _speechProblemShown) { _speechProblemShown = _speech.Problem; _hud.SetNotice(_speechProblemShown, 8f); }
+            string mrProblem = _mr.Check();
+            if (mrProblem != null) { _rig.Passthrough = false; _filters.Set("mr", false); _hud.SetNotice(mrProblem, 10f); }
             if (_photoWanted) ShootPhoto();
         }
 
@@ -827,7 +877,15 @@ namespace AtlasVR
         // JsonUtility builds every nested object, so a slide without a camera has an empty one.
         static bool HasCamera(PkgCamera c) { return c != null && !string.IsNullOrEmpty(c.type) && c.type != "none" && c.viewHeight > 0; }
 
-        void OnDestroy() { if (_in != null) _in.Dispose(); Perf.Restore(); }
+        void OnDestroy()
+        {
+            if (_in != null) _in.Dispose();
+            Perf.Restore();
+            CompanyFocus.Reset();
+            LegendFilter.Reset();
+            Paused = false;
+            _speech.Dispose();
+        }
     }
 
     /// Mouse look for testing in the editor without a headset: hold the right button and move.

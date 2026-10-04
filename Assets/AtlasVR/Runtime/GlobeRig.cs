@@ -29,6 +29,13 @@ namespace AtlasVR
         const double RealScaleBelow = 2000;   // flight altitude (m) under which the world is at real scale
 
         public ViewMode mode = ViewMode.Flight;
+        /// Flight re-anchors Cesium's origin only once the viewer has moved a set distance from it
+        /// (in world meters, after the flight scale), instead of every frame: each new origin
+        /// repositions every loaded tile. Off restores the every-frame origin exactly.
+        public bool reanchorLessOften = true;
+        public const float ReanchorWorld = 1500f;
+        /// Mixed reality: the room shows behind the Earth (camera clears to transparent, no stars).
+        public bool Passthrough;
         public Posture posture = Posture.Standing;
         [Tooltip("Use Google Photorealistic 3D Tiles when the view comes close to the ground.")]
         public bool photorealCloseUps = true;
@@ -166,7 +173,7 @@ namespace AtlasVR
             NightTerrain.ionAssetID = WorldTerrain;
             if (!string.IsNullOrEmpty(ionToken)) NightTerrain.ionAccessToken = ionToken;
             Tune(NightTerrain, quest);
-            if (quest) NightTerrain.maximumCachedBytes = 384L * 1024 * 1024;
+            if (quest) NightTerrain.maximumCachedBytes = 320L * 1024 * 1024;
             nt.layer = NightLayer;
             _night = nt.AddComponent<CesiumIonRasterOverlay>();
             _night.ionAssetID = EarthAtNight;
@@ -222,7 +229,9 @@ namespace AtlasVR
             ts.createPhysicsMeshes = false;          // ground height comes from height sampling instead
             ts.maximumScreenSpaceError = quest ? 24f : 12f;
             ts.maximumSimultaneousTileLoads = quest ? 14u : 24u;
-            ts.maximumCachedBytes = quest ? 640L * 1024 * 1024 : 1024L * 1024 * 1024; // two tilesets stay resident
+            // On the Quest three tilesets share memory (day Earth, night Earth, 3D cities): about
+            // 1.1 GB of tile cache between them, down from 1.7 GB. Night keeps its own smaller budget.
+            ts.maximumCachedBytes = quest ? 384L * 1024 * 1024 : 1024L * 1024 * 1024;
             ts.preloadSiblings = !quest;
             ts.forbidHoles = false;
             // Keep the rest of the globe loaded at a coarse level when it is out of view (behind you, or
@@ -366,14 +375,26 @@ namespace AtlasVR
             }
             s = Math.Max(1.2e-8, s);
 
-            if (Lon != _oLon || Lat != _oLat || oH != _oH)
+            bool moved = Lon != _oLon || Lat != _oLat || oH != _oH;
+            bool floating = reanchorLessOften && mode == ViewMode.Flight && !double.IsNaN(_oLon);
+            if (moved && (!floating || OffsetFromOrigin(Lon, Lat, oH).magnitude > ReanchorWorld))
             {
                 Georef.SetOriginLongitudeLatitudeHeight(Lon, Lat, oH);
                 _oLon = Lon; _oLat = Lat; _oH = oH;
+                moved = false;
             }
             // Each scale change moves the origin again (a pass over every tile); step it by half a percent.
             if (Math.Abs(s - _appliedScale) > _appliedScale * 5e-3) { Georef.scale = s; _appliedScale = s; }
-            Georef.transform.SetPositionAndRotation(anchor, rot);
+            if (moved)
+            {
+                // The origin stays behind: place the globe so the viewer's point lands on the anchor
+                // with its own east-up-north frame turned as rot asks, exactly as if it were the origin.
+                Vector3 lp, e, u, n;
+                LocalFrame(Lon, Lat, oH, out lp, out e, out u, out n);
+                Quaternion r = rot * Quaternion.Inverse(Quaternion.LookRotation(n, u));
+                Georef.transform.SetPositionAndRotation(anchor - r * lp, r);
+            }
+            else Georef.transform.SetPositionAndRotation(anchor, rot);
             Georef.transform.localScale = Vector3.one;
 
             _lens.radius = LensRadius;
@@ -426,8 +447,9 @@ namespace AtlasVR
             _cam.nearClipPlane = 0.05f;
             _cam.clearFlags = CameraClearFlags.SolidColor;
             Color sky = new Color(0.42f, 0.62f, 0.88f), space = new Color(0.005f, 0.008f, 0.02f), room = new Color(0.02f, 0.03f, 0.05f);
-            _cam.backgroundColor = mode == ViewMode.Flight ? Color.Lerp(sky, space, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(15000f, 120000f, (float)h))) : room;
-            _atmo.Draw(this, eye, mode == ViewMode.Flight ? Mathf.InverseLerp(130000f, 500000f, (float)h) : (LensActive ? 0f : 0.6f));
+            _cam.backgroundColor = Passthrough ? new Color(0f, 0f, 0f, 0f)
+                : mode == ViewMode.Flight ? Color.Lerp(sky, space, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(15000f, 120000f, (float)h))) : room;
+            _atmo.Draw(this, eye, mode == ViewMode.Flight ? Mathf.InverseLerp(130000f, 500000f, (float)h) : (LensActive ? 0f : 0.6f), !Passthrough);
         }
 
         // Photorealistic tiles take over below the threshold (with hysteresis); terrain stays on
@@ -680,6 +702,38 @@ namespace AtlasVR
 
         static double3 ToD3(Vector3 v) { return new double3(v.x, v.y, v.z); }
 
+        /// A point's offset from the current origin in the globe's local frame, in double precision
+        /// until the small result is cast down.
+        Vector3 OffsetFromOrigin(double lon, double lat, double h)
+        {
+            Vector3 lp, e, u, n;
+            LocalFrame(lon, lat, h, out lp, out e, out u, out n);
+            return lp;
+        }
+
+        /// The point and its east, up, and north directions in the georeference's local frame.
+        void LocalFrame(double lon, double lat, double h, out Vector3 point, out Vector3 east, out Vector3 up, out Vector3 north)
+        {
+            double4x4 m = Georef.ecefToLocalMatrix;
+            D3 p = Wgs84.ToEcef(lon, lat, h);
+            point = new Vector3(
+                (float)(m.c0.x * p.x + m.c1.x * p.y + m.c2.x * p.z + m.c3.x),
+                (float)(m.c0.y * p.x + m.c1.y * p.y + m.c2.y * p.z + m.c3.y),
+                (float)(m.c0.z * p.x + m.c1.z * p.y + m.c2.z * p.z + m.c3.z));
+            east = Dir(m, Wgs84.East(lon));
+            up = Dir(m, Wgs84.Up(lon, lat));
+            north = Dir(m, Wgs84.North(lon, lat));
+        }
+
+        static Vector3 Dir(double4x4 m, D3 v)
+        {
+            var d = new Vector3(
+                (float)(m.c0.x * v.x + m.c1.x * v.y + m.c2.x * v.z),
+                (float)(m.c0.y * v.x + m.c1.y * v.y + m.c2.y * v.z),
+                (float)(m.c0.z * v.x + m.c1.z * v.y + m.c2.z * v.z));
+            return d.normalized;
+        }
+
         static Matrix4x4 ToMatrix(double4x4 d)
         {
             var m = new Matrix4x4();
@@ -722,7 +776,7 @@ namespace AtlasVR
             _starMat.renderQueue = 1800;   // before the Earth underlay, which writes no depth
         }
 
-        public void Draw(GlobeRig rig, Vector3 eye, float strength)
+        public void Draw(GlobeRig rig, Vector3 eye, float strength, bool stars = true)
         {
             if (strength > 0.01f)
             {
@@ -731,7 +785,7 @@ namespace AtlasVR
                 var rp = new RenderParams(_shell) { worldBounds = new Bounds(rig.BallCenter, Vector3.one * rig.BallRadius * 3f) };
                 Graphics.RenderMesh(rp, _sphere, 0, m);
             }
-            if (rig.mode != ViewMode.Flight || rig.ViewHeight > 50000)
+            if (stars && (rig.mode != ViewMode.Flight || rig.ViewHeight > 50000))
             {
                 float far = Camera.main != null ? Camera.main.farClipPlane * 0.9f : 1000f;
                 Quaternion r = Quaternion.LookRotation(rig.GlobeToWorld.GetColumn(2), rig.GlobeToWorld.GetColumn(1));

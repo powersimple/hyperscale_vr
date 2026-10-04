@@ -1,7 +1,7 @@
 {
  "format": 1,
- "package": "2026-10-03_v1",
- "created": "2026-10-03T23:22:53.054Z",
+ "package": "2026-10-03_v2",
+ "created": "2026-10-04T00:11:49.040Z",
  "deckVersion": "2026-10-01",
  "counts": {
   "tracks": 11,
@@ -81,10 +81,6 @@
   "layers/flows.json": {
    "bytes": 12683,
    "sha256": "26dddd3ee910e6fd96476d09591c23626cf3170076ace1c1344a7d4ba465b3ad"
-  },
-  "layers/other_modules_raw.json": {
-   "bytes": 427750,
-   "sha256": "735ad51883794701d439beaea489179348c948cedffa1a3521fe25681f7b6cac"
   },
   "deck.json": {
    "bytes": 13148,

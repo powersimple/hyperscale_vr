@@ -461,8 +461,13 @@ namespace AtlasVR.EditorTools
             foreach (var f in Features(android))
             {
                 string n = f.GetType().Name;
+                string ui = Get(f, "nameUi") as string ?? "";
+                // Mixed reality: Meta OpenXR's session and camera (passthrough) features, for the room switch.
+                // Meta's own (namespace ...Features.Meta), not the Android XR features of the same names.
+                bool metaNs = f.GetType().Namespace == "UnityEngine.XR.OpenXR.Features.Meta";
+                bool passthrough = metaNs && (n == "ARSessionFeature" || n == "ARCameraFeature");
                 bool want = n == "MetaQuestFeature" || n == "OculusTouchControllerProfile" || n == "MetaQuestTouchPlusControllerProfile" || n == "MetaQuestTouchProControllerProfile"
-                         || n == "HandTracking" || n == "MetaHandTrackingAim" || n == "HandInteractionProfile" || n == "FoveatedRenderingFeature";
+                         || n == "HandTracking" || n == "MetaHandTrackingAim" || n == "HandInteractionProfile" || n == "FoveatedRenderingFeature" || passthrough;
                 if (want) { Set(f, "enabled", true); log.AppendLine("OpenXR feature on (Android): " + n + "."); }
                 if (n == "MetaQuestFeature")
                 {
@@ -506,6 +511,13 @@ namespace AtlasVR.EditorTools
             }
             yield return meta ? "Meta Quest feature on." : "!Meta Quest feature is off (Project Settings > XR Plug-in Management > OpenXR > Android).";
             yield return touch ? "Touch controller profile on." : "!No Touch controller profile enabled.";
+            bool pass = false;
+            foreach (var f in Features(android))
+            {
+                string n = f.GetType().Name, ui = Get(f, "nameUi") as string ?? "";
+                if (n == "ARCameraFeature" && f.GetType().Namespace == "UnityEngine.XR.OpenXR.Features.Meta" && Get(f, "enabled") is bool && (bool)Get(f, "enabled")) pass = true;
+            }
+            yield return pass ? "Passthrough (mixed reality) feature on." : "!Passthrough feature is off: the room switch will say it is unavailable (run Configure for Meta Quest).";
             yield return internetRemoved ? "!The Meta Quest feature removes the internet permission; untick Force Remove Internet Permission." : "Internet permission kept by the Meta Quest feature.";
         }
     }

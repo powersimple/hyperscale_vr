@@ -19,6 +19,8 @@ namespace AtlasVR
         readonly HashSet<string> _forced = new HashSet<string>();
         public readonly List<FilterItem> categories = new List<FilterItem>();
         public readonly List<FilterItem> panels = new List<FilterItem>();
+        /// Comfort and access: the viewer's own settings, kept across slides and Begin.
+        public readonly List<FilterItem> access = new List<FilterItem>();
         public readonly List<string> fuels = new List<string>();
         public event Action Changed;
 
@@ -49,12 +51,21 @@ namespace AtlasVR
             var labels = new FilterItem("labels", "Place labels up close");
             var night = new FilterItem("night", "Night lights");
             var photo = new FilterItem("photoreal", "3D cities up close");
-            categories.AddRange(new[] { dc, ai, clouds, cables, power, flows, named, borders, labels, night, photo });
+            var room = new FilterItem("mr", "Mixed reality: your room around the Earth");
+            categories.AddRange(new[] { dc, ai, clouds, cables, power, flows, named, borders, labels, night, photo, room });
 
             panels.Add(new FilterItem("panel.story", "Story and title"));
             panels.Add(new FilterItem("panel.stats", "Stats"));
             panels.Add(new FilterItem("panel.info", "Selection data"));
             panels.Add(new FilterItem("panel.sources", "Sources"));
+
+            access.Add(new FilterItem("access.large", "Larger text and buttons"));
+            access.Add(new FilterItem("access.contrast", "High contrast panels"));
+            access.Add(new FilterItem("access.speak", "Read each slide aloud"));
+            access.Add(new FilterItem("access.fade", "Fade between places instead of flying"));
+            access.Add(new FilterItem("access.still", "Hold animations still"));
+            access.Add(new FilterItem("access.snap", "Turn in steps"));
+            access.Add(new FilterItem("access.onehand", "One hand: the right controller does it all"));
 
             // Sub-items and panels start on; labels and 3D cities start on.
             foreach (var c in categories) foreach (var s in c.children) _on[s.key] = true;
@@ -62,6 +73,8 @@ namespace AtlasVR
             _on["labels"] = true;
             _on["borders"] = true;
             _on["photoreal"] = true;
+            // Comfort and access settings are remembered on the headset between sessions.
+            foreach (var a in access) _on[a.key] = UnityEngine.PlayerPrefs.GetInt("AtlasVR." + a.key, 0) == 1;
         }
 
         public bool On(string key) { bool v; return _on.TryGetValue(key, out v) && v; }
@@ -83,11 +96,15 @@ namespace AtlasVR
             _forced.Clear();
         }
 
+        /// A setting changed by the app itself (a switch that could not take effect goes back off).
+        public void Set(string key, bool on) { if (On(key) == on) return; _on[key] = on; Raise(); }
+
         /// A viewer's change.
         public void Toggle(string key)
         {
             _on[key] = !On(key);
             _forced.Add(key);
+            if (key.StartsWith("access.")) { UnityEngine.PlayerPrefs.SetInt("AtlasVR." + key, On(key) ? 1 : 0); UnityEngine.PlayerPrefs.Save(); }
             Raise();
         }
 

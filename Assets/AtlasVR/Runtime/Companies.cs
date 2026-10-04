@@ -36,6 +36,9 @@ namespace AtlasVR
             if (Active != before && Changed != null) Changed();
         }
 
+        /// Forget every listener (the scene is ending; in the editor, statics outlive play mode).
+        public static void Reset() { Changed = null; Hover = null; Held = null; }
+
         public static void Clear()
         {
             if (Hover == null && Held == null) return;

@@ -57,13 +57,17 @@ namespace AtlasVR
         readonly List<Spot> _spots = new List<Spot>();
         struct Spot { public Transform t; public float yaw, pitch, halfDeg; public int side; }
         float _orbitBlend;
+        readonly List<Image> _backgrounds = new List<Image>();
+        readonly List<KeyValuePair<Transform, Vector2>> _panels = new List<KeyValuePair<Transform, Vector2>>();
+        static float _scale = 1f;
+        static readonly Color HighContrast = new Color(0f, 0f, 0f, 0.94f);
 
         public event Action Next, Back;
         public event Action<string> Explore, OpenTrack;
         public event Action<int> Scrub;
         public event Action<PkgStat> StatPressed;
 
-        const float Dist = 1.5f, RowH = 32f, FilterW = 340f;
+        const float Dist = 1.5f, RowH = 40f, FilterW = 360f;   // rows 2.3 degrees tall (3 with larger text)
         // The bottom box: 15% wider than before, and the bars beneath it close up.
         const float BoxW = 1220f, BoxH = 300f, SliderW = 1000f, DegPerUnit = 0.0573f;   // degrees per canvas unit at 1.5 m
         const float BoxPitch = -49f, SourcesPitch = BoxPitch - BoxH * DegPerUnit * 0.5f - 0.6f - 104f * DegPerUnit * 0.5f;
@@ -116,6 +120,7 @@ namespace AtlasVR
             head.gameObject.AddComponent<LayoutElement>().preferredHeight = 28;
             foreach (var c in filters.categories) AddFilter(c);
             AddFilter(new FilterItem("panels", "Panels") { children = filters.panels }, false);
+            AddFilter(new FilterItem("access", "Comfort and access") { children = filters.access }, false);
             // Clear: every layer that draws data off, until the next slide.
             var clear = UI.Btn("Clear", _filterList, "Clear", 17, () => _filters.ClearAll(), new Color(0.05f, 0.14f, 0.38f, 0.85f));
             clear.gameObject.AddComponent<LayoutElement>().preferredHeight = 40;
@@ -194,6 +199,8 @@ namespace AtlasVR
             var c = UI.WorldCanvas(name, root, size, _cam);
             if (topPivot) ((RectTransform)c.transform).pivot = new Vector2(0.5f, 1f);
             var bg = UI.Box("Background", c.transform, UI.Panel); UI.Stretch(bg.rectTransform); UI.Round(bg, 22f);
+            _backgrounds.Add(bg);
+            _panels.Add(new KeyValuePair<Transform, Vector2>(c.transform, new Vector2(yaw, pitch)));
             // A thin glowing line along the top, inset from the rounded corners.
             var edge = UI.Box("Accent", c.transform, new Color(UI.Accent.r, UI.Accent.g, UI.Accent.b, 0.85f));
             edge.rectTransform.anchorMin = new Vector2(0, 1); edge.rectTransform.anchorMax = new Vector2(1, 1);
@@ -218,7 +225,20 @@ namespace AtlasVR
             Quaternion q = Quaternion.Euler(-pitch, yaw, 0);
             t.localPosition = q * Vector3.forward * Dist;
             t.localRotation = Quaternion.LookRotation(t.localPosition, q * Vector3.up);
-            t.localScale = Vector3.one * 0.001f * Dist;
+            t.localScale = Vector3.one * 0.001f * Dist * _scale;
+        }
+
+        /// Comfort and access: larger text and buttons (every panel 30 percent larger, each still
+        /// centered where it was), and high-contrast panels (near-opaque black behind the text).
+        public void SetAccess(bool large, bool contrast)
+        {
+            float s = large ? 1.3f : 1f;
+            if (!Mathf.Approximately(s, _scale))
+            {
+                _scale = s;
+                foreach (var p in _panels) if (p.Key != null) p.Key.localScale = Vector3.one * 0.001f * Dist * _scale;
+            }
+            foreach (var b in _backgrounds) if (b != null) b.color = contrast ? HighContrast : UI.Panel;
         }
 
         // ------------------------------------------------------------ filters
@@ -316,7 +336,7 @@ namespace AtlasVR
                 if (show) subs++;
             }
             foreach (var c in _filters.categories) rows++;
-            rows++; // Panels
+            rows += 2; // Panels, Comfort and access
             foreach (var kv in _arrows) kv.Value.text = _expanded.Contains(kv.Key) ? "▼" : "◄";
             float h = 36 + 28 + rows * (RowH + 4) + subs * RowH + 48;   // padding, heading, rows, Clear
             var rt = (RectTransform)_filtersPanel.transform;

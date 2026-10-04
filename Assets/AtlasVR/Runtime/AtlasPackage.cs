@@ -93,20 +93,39 @@ namespace AtlasVR
             string txt = null;
             Action<string, string> take = (t, e) => { txt = t; if (e != null && err == null) err = e; };
 
-            yield return ReadText("manifest.json", take); if (txt != null) pkg.manifest = JsonUtility.FromJson<PkgManifest>(txt); txt = null;
-            yield return ReadText("deck.json", take); if (txt != null) pkg.deck = JsonUtility.FromJson<PkgDeck>(txt); txt = null;
-            yield return ReadText("slides.json", take); if (txt != null) pkg.slides = JsonUtility.FromJson<PkgSlides>(txt).slides; txt = null;
-            yield return ReadText("refs.json", take); if (txt != null) pkg.refs = JsonUtility.FromJson<PkgRefs>(txt).refs; txt = null;
+            // Read every file first, then parse them all on a worker thread: about 6 MB of JSON that
+            // otherwise stalled the first frames. (JsonUtility is safe off the main thread for plain classes.)
+            var text = new Dictionary<string, string>();
+            string[] required = { "manifest.json", "deck.json", "slides.json", "refs.json" };
+            string[] layers = { "compute", "telecables", "sites", "borders", "regions", "flows", "footprints", "landlines" };
+            foreach (var f in required) { yield return ReadText(f, take); if (txt != null) text[f] = txt; txt = null; }
             // Layers are optional: a missing one leaves its overlay out, nothing more.
             Action<string, string> optional = (t, e) => { txt = t; if (e != null) Debug.LogWarning("[Public Hyperscale] " + e); };
-            yield return ReadText("layers/compute.json", optional); if (txt != null) pkg.compute = JsonUtility.FromJson<PkgComputeLayer>(txt); txt = null;
-            yield return ReadText("layers/telecables.json", optional); if (txt != null) pkg.tele = JsonUtility.FromJson<PkgTeleLayer>(txt); txt = null;
-            yield return ReadText("layers/sites.json", optional); if (txt != null) pkg.sites = JsonUtility.FromJson<PkgSites>(txt); txt = null;
-            yield return ReadText("layers/borders.json", optional); if (txt != null) pkg.borders = JsonUtility.FromJson<PkgBorders>(txt); txt = null;
-            yield return ReadText("layers/regions.json", optional); if (txt != null) pkg.regions = JsonUtility.FromJson<PkgRegions>(txt); txt = null;
-            yield return ReadText("layers/flows.json", optional); if (txt != null) pkg.flows = JsonUtility.FromJson<PkgFlows>(txt); txt = null;
-            yield return ReadText("layers/footprints.json", optional); if (txt != null) pkg.footprints = JsonUtility.FromJson<PkgFootprints>(txt); txt = null;
-            yield return ReadText("layers/landlines.json", optional); if (txt != null) pkg.land = JsonUtility.FromJson<PkgLandLines>(txt); txt = null;
+            foreach (var l in layers) { string f = "layers/" + l + ".json"; yield return ReadText(f, optional); if (txt != null) text[f] = txt; txt = null; }
+
+            string parseError = null;
+            var parse = System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    string t;
+                    if (text.TryGetValue("manifest.json", out t)) pkg.manifest = JsonUtility.FromJson<PkgManifest>(t);
+                    if (text.TryGetValue("deck.json", out t)) pkg.deck = JsonUtility.FromJson<PkgDeck>(t);
+                    if (text.TryGetValue("slides.json", out t)) pkg.slides = JsonUtility.FromJson<PkgSlides>(t).slides;
+                    if (text.TryGetValue("refs.json", out t)) pkg.refs = JsonUtility.FromJson<PkgRefs>(t).refs;
+                    if (text.TryGetValue("layers/compute.json", out t)) pkg.compute = JsonUtility.FromJson<PkgComputeLayer>(t);
+                    if (text.TryGetValue("layers/telecables.json", out t)) pkg.tele = JsonUtility.FromJson<PkgTeleLayer>(t);
+                    if (text.TryGetValue("layers/sites.json", out t)) pkg.sites = JsonUtility.FromJson<PkgSites>(t);
+                    if (text.TryGetValue("layers/borders.json", out t)) pkg.borders = JsonUtility.FromJson<PkgBorders>(t);
+                    if (text.TryGetValue("layers/regions.json", out t)) pkg.regions = JsonUtility.FromJson<PkgRegions>(t);
+                    if (text.TryGetValue("layers/flows.json", out t)) pkg.flows = JsonUtility.FromJson<PkgFlows>(t);
+                    if (text.TryGetValue("layers/footprints.json", out t)) pkg.footprints = JsonUtility.FromJson<PkgFootprints>(t);
+                    if (text.TryGetValue("layers/landlines.json", out t)) pkg.land = JsonUtility.FromJson<PkgLandLines>(t);
+                }
+                catch (Exception e) { parseError = "The package could not be read: " + e.Message; }
+            });
+            while (!parse.IsCompleted) yield return null;
+            if (parseError != null && err == null) err = parseError;
 
             if (pkg.slides != null) foreach (var s in pkg.slides) pkg._slides[s.id] = s;
             if (pkg.refs != null) foreach (var r in pkg.refs) pkg._refs[r.id] = r;

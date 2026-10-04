@@ -19,6 +19,7 @@ namespace AtlasVR
         readonly List<Candidate> _shown = new List<Candidate>();
         readonly List<Candidate> _scratch = new List<Candidate>();
         float _next;
+        int _focusVersion = -1;
 
         struct Candidate
         {
@@ -52,8 +53,9 @@ namespace AtlasVR
         {
             bool on = enabled && rig != null && eye != null && rig.mode == ViewMode.Flight && rig.ViewHeight < ShowBelow;
             if (!on) { Hide(); return; }
-            if (Time.unscaledTime >= _next)
+            if (Time.unscaledTime >= _next || _focusVersion != LabelFocus.Version)
             {
+                _focusVersion = LabelFocus.Version;
                 _next = Time.unscaledTime + 0.25f;
                 Gather(rig, eye, compute, cables, sites);
             }
@@ -67,6 +69,7 @@ namespace AtlasVR
 
         void Consider(double lon, double lat, string title, string line, float weight)
         {
+            if (LabelFocus.Near(lon, lat)) return;   // the focus label stands there
             Vector3 w = _g.MultiplyPoint3x4(Wgs84.ToEcef(lon, lat, _ground).ToVector3());
             Vector3 d = w - _pos;
             float dist = d.magnitude;
@@ -96,8 +99,16 @@ namespace AtlasVR
                         Consider(s.lon, s.lat, s.name, line, 3f);
                     }
                 if (compute.PointsVisible)
-                    foreach (var p in compute.Data.dcs)
+                {
+                    // Only the data centers within reach of where you are (the grid), not all of them.
+                    var near = compute.DcsNear(rig.Lon, rig.Lat, _reach / Math.Max(1e-9, rig.GlobeScale) / 111000.0 + 0.1);
+                    int count = near != null ? near.Count : compute.Data.dcs.Length;
+                    for (int k = 0; k < count; k++)
+                    {
+                        var p = compute.Data.dcs[near != null ? near[k] : k];
                         Consider(p.lon, p.lat, p.name, string.IsNullOrEmpty(p.org) ? "Data center" : p.org, 1f);
+                    }
+                }
             }
             if (sites != null)
             {
@@ -146,6 +157,33 @@ namespace AtlasVR
 
 namespace AtlasVR
 {
+    /// Where the focus labels stand (the selection's, and the laser's): the smaller labels give
+    /// way there, so a place never carries two labels at once.
+    public static class LabelFocus
+    {
+        static double _sLon, _sLat, _hLon, _hLat;
+        static bool _s, _h;
+        public static int Version { get; private set; }
+
+        public static void Set(PickInfo selected, PickInfo hover)
+        {
+            bool s = selected != null && (selected.lon != 0 || selected.lat != 0);
+            bool h = hover != null && (hover.lon != 0 || hover.lat != 0);
+            double sLon = s ? selected.lon : 0, sLat = s ? selected.lat : 0, hLon = h ? hover.lon : 0, hLat = h ? hover.lat : 0;
+            if (s == _s && h == _h && sLon == _sLon && sLat == _sLat && hLon == _hLon && hLat == _hLat) return;
+            _s = s; _h = h; _sLon = sLon; _sLat = sLat; _hLon = hLon; _hLat = hLat;
+            Version++;
+        }
+
+        /// True at a focus label's place (within about ten meters).
+        public static bool Near(double lon, double lat)
+        {
+            const double Eps = 1e-4;
+            return (_s && Math.Abs(lon - _sLon) < Eps && Math.Abs(lat - _sLat) < Eps)
+                || (_h && Math.Abs(lon - _hLon) < Eps && Math.Abs(lat - _hLat) < Eps);
+        }
+    }
+
     /// The label for what the laser points at, and the selection's label. The selection keeps its
     /// label at any height; flying low among other labels it stands out in a larger, gold font.
     public class FocusLabels

@@ -31,6 +31,7 @@ Shader "AtlasVR/Flow"
             float4 _AtlasLens;
             float4 _AtlasLensUp;
             float4 _AtlasRefWorld;
+            float _AtlasStill;            // 1 holds the pulses still (the reduced-motion setting)
             float4 _AtlasRefEcefHigh;
             float4 _AtlasRefEcefLow;
 
@@ -99,7 +100,7 @@ Shader "AtlasVR/Flow"
                 }
                 float count = i.pulse.x;
                 float speed = i.pulse.y;
-                float t = _Time.y * speed;
+                float t = _Time.y * speed * (1.0 - _AtlasStill);
                 float v = frac(i.data.y * max(count, 1.0) - t);
                 float pulse = pow(1.0 - v, 5.0) * step(0.02, v);
                 float edge = 1.0 - abs(i.data.x);

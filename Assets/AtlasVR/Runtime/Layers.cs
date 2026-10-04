@@ -37,6 +37,8 @@ namespace AtlasVR
             if (off ? Off.Add(key) : Off.Remove(key)) { if (Changed != null) Changed(); }
         }
         public static void Clear() { if (Off.Count == 0) return; Off.Clear(); if (Changed != null) Changed(); }
+        /// Forget every listener and setting (the scene is ending).
+        public static void Reset() { Changed = null; Off.Clear(); }
     }
 
     static class Fmt
@@ -68,6 +70,7 @@ namespace AtlasVR
         readonly List<TextMeshPro> _labels = new List<TextMeshPro>();
         readonly List<D3> _ecef = new List<D3>();
         readonly List<Vector3> _up = new List<Vector3>();
+        readonly List<Vector2> _lonlat = new List<Vector2>();
         public bool visible;
         public float heightWS = 0.012f;
         public float liftWS = 0.012f;
@@ -81,7 +84,7 @@ namespace AtlasVR
         public void Clear()
         {
             foreach (var l in _labels) if (l != null) UnityEngine.Object.Destroy(l.gameObject);
-            _labels.Clear(); _ecef.Clear(); _up.Clear();
+            _labels.Clear(); _ecef.Clear(); _up.Clear(); _lonlat.Clear();
         }
 
         public void Add(string text, double lon, double lat, Color color, float scale = 1f)
@@ -100,6 +103,7 @@ namespace AtlasVR
             _labels.Add(t);
             _ecef.Add(Wgs84.ToEcef(lon, lat, 0));
             _up.Add(Wgs84.Up(lon, lat).ToVector3());
+            _lonlat.Add(new Vector2((float)lon, (float)lat));
         }
 
         public void Update(GlobeRig rig, Transform eye)
@@ -112,7 +116,7 @@ namespace AtlasVR
             {
                 Vector3 p = g.MultiplyPoint3x4(_ecef[i].ToVector3());
                 Vector3 up = g.MultiplyVector(_up[i]).normalized;
-                bool vis = rig.Visible(p, up, eye.position);
+                bool vis = rig.Visible(p, up, eye.position) && !LabelFocus.Near(_lonlat[i].x, _lonlat[i].y);
                 var l = _labels[i];
                 if (l.gameObject.activeSelf != vis) l.gameObject.SetActive(vis);
                 if (!vis) continue;
@@ -244,6 +248,44 @@ namespace AtlasVR
         }
 
         public PkgComputeLayer Data { get { return _d; } }
+
+        // A one-degree grid of the 5,274 data centers, so the laser and the nearby labels test the
+        // ones close by instead of all of them.
+        Dictionary<int, List<int>> _grid;
+        readonly List<int> _near = new List<int>();
+        static int Cell(int lonI, int latI) { return ((lonI % 360 + 360) % 360) * 1000 + latI; }
+
+        void BuildGrid()
+        {
+            _grid = new Dictionary<int, List<int>>();
+            for (int i = 0; i < _d.dcs.Length; i++)
+            {
+                int k = Cell((int)Math.Floor(_d.dcs[i].lon), (int)Math.Floor(_d.dcs[i].lat));
+                List<int> l;
+                if (!_grid.TryGetValue(k, out l)) { l = new List<int>(); _grid[k] = l; }
+                l.Add(i);
+            }
+        }
+
+        /// The data centers within about radiusDeg of a place, or null when that would be most of
+        /// them anyway (the caller then walks the whole list). The list is reused: read it at once.
+        public List<int> DcsNear(double lon, double lat, double radiusDeg)
+        {
+            if (radiusDeg > 25) return null;
+            if (_grid == null) BuildGrid();
+            _near.Clear();
+            double lonR = radiusDeg / Math.Max(0.05, Math.Cos(Math.Min(85.0, Math.Abs(lat)) * Math.PI / 180.0));
+            if (lonR > 179) lonR = 179;
+            int lat0 = (int)Math.Floor(lat - radiusDeg), lat1 = (int)Math.Floor(lat + radiusDeg);
+            int lon0 = (int)Math.Floor(lon - lonR), lon1 = (int)Math.Floor(lon + lonR);
+            for (int a = lon0; a <= lon1; a++)
+                for (int b = Math.Max(-90, lat0); b <= Math.Min(89, lat1); b++)
+                {
+                    List<int> l;
+                    if (_grid.TryGetValue(Cell(a, b), out l)) _near.AddRange(l);
+                }
+            return _near;
+        }
         public bool PointsVisible { get; private set; }
         public bool AiVisible { get; private set; }
         public bool BuildingVisible { get; private set; }
@@ -280,8 +322,25 @@ namespace AtlasVR
                 }
                 else if (!LegendFilter.IsOff("compute:points"))
                 {
-                    foreach (var p in _d.dcs)
+                    // Only the data centers around where the laser meets the Earth.
+                    List<int> near = null;
+                    double hl, ht; Vector3 hw;
+                    if (rig.RayToEarth(ray, out hl, out ht, out hw))
                     {
+                        // The pick cone (up to tol degrees) spreads along the ground as the ray grazes it.
+                        Vector3 upW = g.MultiplyVector(Wgs84.Up(hl, ht).ToVector3()).normalized;
+                        double sinG = Math.Abs(Vector3.Dot(ray.direction.normalized, upW));
+                        if (sinG >= 0.3)
+                        {
+                            double range = Math.Max(rig.ViewHeight, Vector3.Distance(ray.origin, hw) / Math.Max(1e-9, rig.GlobeScale));
+                            double meters = range * Math.Tan(tol * Math.PI / 180.0) / sinG * 1.5;
+                            near = DcsNear(hl, ht, meters / 111000.0 + 0.1);
+                        }
+                    }
+                    int count = near != null ? near.Count : _d.dcs.Length;
+                    for (int k = 0; k < count; k++)
+                    {
+                        var p = _d.dcs[near != null ? near[k] : k];
                         float a = Angle(ray, rig, g, eye, p.lon, p.lat);
                         if (a < best)
                         {

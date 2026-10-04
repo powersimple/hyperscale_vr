@@ -1,7 +1,10 @@
 // The Academy marks in the heads-up display.
-//   Emblem   the 3D axes emblem at the lower right, tipped back 45 degrees, rocking gently.
+//   Emblem   the 3D axes emblem at the lower right of the display, square to you and tipped
+//            forward 45 degrees, its top toward you.
 //   Logo     the silver wordmark lying flat below you, so looking down finds it on the floor,
-//            lit from a low angle so the extruded sides catch the light.
+//            lit from a low angle so the extruded sides catch the light. It stands outside the
+//            display, so it is there with the display off; zoomed all the way out, the build
+//            version reads beneath it.
 // The meshes are baked from the Academy's glTF models into Resources/*.bytes by
 // _vr/export/bake_emblem.py, so the project needs no glTF importer.
 using System;
@@ -12,11 +15,11 @@ namespace AtlasVR
 {
     public class Branding
     {
-        readonly Transform _emblem, _spin, _logo, _root;
+        readonly Transform _emblem, _spin, _logo, _root, _floor;
+        readonly TMPro.TextMeshPro _version;
         // Lights are set in the display's frame and turned with it, so the lighting stays put as you turn.
         static readonly System.Collections.Generic.List<KeyValuePairLight> _lit = new System.Collections.Generic.List<KeyValuePairLight>();
         struct KeyValuePairLight { public Material m; public Vector3 local; }
-        float _t;
 
         public Branding(Transform hudRoot, Camera cam)
         {
@@ -29,35 +32,63 @@ namespace AtlasVR
                 _emblem.SetParent(hudRoot, false);
                 Quaternion q = Quaternion.Euler(40f, 52f, 0);
                 _emblem.localPosition = q * Vector3.forward * 1.45f;
-                // Facing you, then tipped back 45 degrees.
-                _emblem.localRotation = Quaternion.LookRotation(_emblem.localPosition, q * Vector3.up) * Quaternion.Euler(45f, 0, 0);
+                // Facing you, tipped forward 45 degrees (its top toward you).
+                _emblem.localRotation = Quaternion.LookRotation(_emblem.localPosition, q * Vector3.up) * Quaternion.Euler(-45f, 0, 0);
                 _emblem.localScale = Vector3.one * 0.62f;
                 _spin = new GameObject("Spin").transform;
                 _spin.SetParent(_emblem, false);
+                _spin.localRotation = Quaternion.Euler(0, 180f, 0);   // square to you, held still
                 Build(emblem.bytes, _spin, null, 0f, new Vector4(0.4f, 0.8f, -0.45f, 0f));
             }
 
             var logo = Resources.Load<TextAsset>("AcademyLogo");
             if (logo != null)
             {
+                // Its own root, following the display's position and heading but not its on and off.
+                _floor = new GameObject("Academy logo root").transform;
                 _logo = new GameObject("Academy logo (floor)").transform;
-                _logo.SetParent(hudRoot, false);
+                _logo.SetParent(_floor, false);
                 _logo.localPosition = Quaternion.Euler(82f, 0, 0) * Vector3.forward * 1.55f;
                 // Lying flat, face up, the tops of the letters away from you.
                 _logo.localRotation = Quaternion.Euler(90f, 0, 0) * Quaternion.Euler(0, 180f, 0);
                 _logo.localScale = Vector3.one * 0.95f;
                 // Silver, raked by a low light from the front left.
                 Build(logo.bytes, _logo, new Color(0.82f, 0.85f, 0.9f), 0.92f, new Vector4(-0.55f, 0.5f, -0.65f, 0f));
+
+                var vgo = new GameObject("Build version");
+                vgo.transform.SetParent(_floor, false);
+                // Just past the logo on the floor, lying flat like it, read from where you stand.
+                vgo.transform.localPosition = Quaternion.Euler(70f, 0, 0) * Vector3.forward * 1.62f;
+                vgo.transform.localRotation = Quaternion.Euler(90f, 0, 0);
+                vgo.transform.localScale = Vector3.one * 0.012f;
+                _version = vgo.AddComponent<TMPro.TextMeshPro>();
+                _version.fontSize = 6f;
+                _version.alignment = TMPro.TextAlignmentOptions.Center;
+                _version.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+                _version.color = new Color(0.82f, 0.86f, 0.95f, 0f);
+                _version.rectTransform.sizeDelta = new Vector2(60f, 8f);
+                vgo.SetActive(false);
             }
+        }
+
+        public void SetVersion(string text) { if (_version != null) _version.text = Hud.Esc(text); }
+
+        /// The logo follows the display's frame whether or not the display shows; the version
+        /// shows only zoomed all the way out (fade 0 to 1).
+        public void Follow(Transform hudRoot, float versionFade)
+        {
+            if (_floor != null && hudRoot != null) _floor.SetPositionAndRotation(hudRoot.position, hudRoot.rotation);
+            if (_version == null) return;
+            bool on = versionFade > 0.02f;
+            if (_version.gameObject.activeSelf != on) _version.gameObject.SetActive(on);
+            if (on) { var c = _version.color; c.a = versionFade; _version.color = c; }
         }
 
         /// A gentle turn back and forth, so the emblem reads as an object.
         public void Update()
         {
             if (_root != null) foreach (var l in _lit) l.m.SetVector("_LightDir", _root.rotation * l.local);
-            if (_spin == null) return;
-            _t += Time.deltaTime;
-            _spin.localRotation = Quaternion.Euler(0, 180f + 28f * Mathf.Sin(_t * 0.6f), 0);
+            // The emblem holds still, square to you (the gentle rocking is gone).
         }
 
         // Format: "AEM1", count, then per part: r g b (linear), vertex count, positions, normals, index count, indices.
